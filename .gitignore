@@ -1,0 +1,16 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Raw downloads used by the data pipeline (large, re-creatable)
+backend/data/cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

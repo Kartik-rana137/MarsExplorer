@@ -1,0 +1,50 @@
+{
+  "rows": 1038,
+  "cols": 964,
+  "cell_m": 4.0,
+  "cell_deg": 6.748241943246087e-05,
+  "lat_north": -4.779991919453228,
+  "lon_west": 137.35499855709594,
+  "lat_south": -4.850038670824122,
+  "lon_east": 137.42005160942884,
+  "cell_east_m": 3.9858835835392177,
+  "cell_north_m": 4.0,
+  "elev_min": -4031.33056640625,
+  "elev_max": -3097.6640625,
+  "source": "MSL Gale Merged DEM 1 m v3 (USGS Astrogeology / MSL project, from HiRISE stereo images)",
+  "source_url": "https://planetarymaps.usgs.gov/mosaic/Mars/MSL/MSL_Gale_DEM_Mosaic_1m_v3.tif",
+  "slope_method": "steepest slope inside each 4 m cell, from the 1 m elevation data smoothed with a 3 m Gaussian",
+  "slope_classes_deg": [
+    10,
+    15,
+    20,
+    25,
+    90
+  ],
+  "slope_colours": [
+    "#000000",
+    "#f6d34d",
+    "#f08a34",
+    "#d63c30",
+    "#78163e"
+  ],
+  "validation": {
+    "stops_compared": 263,
+    "elevation_difference_m": {
+      "median": -0.06,
+      "std": 0.3
+    },
+    "rover_tilt_deg": {
+      "median": 8.6,
+      "p90": 14.7,
+      "max": 24.0
+    },
+    "grid_slope_at_stops_deg": {
+      "median": 9.5,
+      "p90": 14.8,
+      "max": 33.1
+    },
+    "slope_tilt_correlation": 0.53,
+    "note": "Grid values sampled at Curiosity's stops versus the elevation and tilt the rover recorded there."
+  }
+}

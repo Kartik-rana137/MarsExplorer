@@ -1,0 +1,9 @@
+# API server and planning engine
+fastapi
+uvicorn[standard]
+numpy
+scipy
+contourpy
+
+# Data pipeline only (decoding the LZW-compressed elevation GeoTIFF)
+imagecodecs
