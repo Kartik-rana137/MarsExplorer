@@ -1,16 +1,18 @@
-"""Shared helpers for the data pipeline: paths, HTTP with retries, tiny PNG writer."""
+"""Shared helpers for the data pipeline: paths, HTTP with retries."""
 from __future__ import annotations
 
 import json
-import struct
+import sys
 import time
-import zlib
 from pathlib import Path
 from urllib.request import Request, urlopen
 
 BACKEND = Path(__file__).resolve().parents[1]
 DATA = BACKEND / "data"
 CACHE = DATA / "cache"
+
+sys.path.insert(0, str(BACKEND))
+from app.png import png_palette  # noqa: E402,F401  (shared PNG writer)
 
 MARS_RADIUS_M = 3_396_190.0  # sphere used by the USGS/MSL Gale mosaics
 
@@ -50,45 +52,3 @@ def write_json(path: Path, obj, compact: bool = True) -> None:
     text = json.dumps(obj, separators=(",", ":")) if compact else json.dumps(obj, indent=2)
     path.write_text(text + "\n", encoding="utf-8")
     print(f"wrote {path.relative_to(BACKEND)} ({path.stat().st_size / 1024:.0f} KB)")
-
-
-def _png_chunk(kind: bytes, payload: bytes) -> bytes:
-    return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
-
-
-def png_palette(indices, palette_rgba) -> bytes:
-    """Encode a 2-D uint8 index array as a paletted PNG. palette_rgba: list of (r, g, b, a)."""
-    import numpy as np
-
-    indices = np.ascontiguousarray(indices, dtype=np.uint8)
-    height, width = indices.shape
-    rows = np.empty((height, width + 1), dtype=np.uint8)
-    rows[:, 0] = 0  # filter type "none" for every scanline
-    rows[:, 1:] = indices
-    plte = b"".join(bytes(c[:3]) for c in palette_rgba)
-    trns = bytes(c[3] for c in palette_rgba)
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 3, 0, 0, 0))
-        + _png_chunk(b"PLTE", plte)
-        + _png_chunk(b"tRNS", trns)
-        + _png_chunk(b"IDAT", zlib.compress(rows.tobytes(), 6))
-        + _png_chunk(b"IEND", b"")
-    )
-
-
-def png_rgb(rgb) -> bytes:
-    """Encode an (H, W, 3) uint8 array as a truecolour PNG."""
-    import numpy as np
-
-    rgb = np.ascontiguousarray(rgb, dtype=np.uint8)
-    height, width, _ = rgb.shape
-    rows = np.empty((height, width * 3 + 1), dtype=np.uint8)
-    rows[:, 0] = 0
-    rows[:, 1:] = rgb.reshape(height, width * 3)
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-        + _png_chunk(b"IDAT", zlib.compress(rows.tobytes(), 6))
-        + _png_chunk(b"IEND", b"")
-    )

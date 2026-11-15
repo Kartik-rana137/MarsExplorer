@@ -1,9 +1,9 @@
-# API server and planning engine
+# API server and planning engine (developed with fastapi 0.162, uvicorn 0.54, numpy 2.5, scipy 1.18, contourpy 1.4)
 fastapi
 uvicorn[standard]
 numpy
 scipy
 contourpy
 
-# Data pipeline only (decoding the LZW-compressed elevation GeoTIFF)
+# Data pipeline only: decodes the LZW-compressed elevation GeoTIFF (developed with imagecodecs 2026.11)
 imagecodecs

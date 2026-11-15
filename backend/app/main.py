@@ -1,8 +1,8 @@
 """HTTP API of the Mars EVA planner.
 
 Run from the repository root:
-    backend/.venv/Scripts/python -m uvicorn app.main:app --app-dir backend --port 8000
-Interactive API docs are then at http://localhost:8000/docs
+    backend/.venv/Scripts/python -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8001
+Interactive API docs are then at http://localhost:8001/docs
 """
 from __future__ import annotations
 
