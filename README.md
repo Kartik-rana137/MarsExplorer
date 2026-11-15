@@ -58,7 +58,7 @@ If port 8000 is already in use in your environment, the app is configured to use
 
 The planner also comes as an app that runs entirely on the device, with nothing to install first. Map imagery and photos still load from NASA's servers, so the device must be online.
 
-Download the apps from GitHub: open the **Actions** tab, choose **Build apps**, open the latest successful run and scroll to **Artifacts** (you need to be signed in to GitHub). When a version tag such as `v1.0.0` is pushed, the same files are also published under **Releases**.
+Download the apps from GitHub: open the **Releases** tab, choose **The app for your device (Windows/MAc/Android**.
 
 - **Windows 10 or 11:** run `MarsEVAPlanner.exe`. The app is not signed, so Windows may warn about an unknown publisher: choose *More info*, then *Run anyway*. It needs the Microsoft Edge WebView2 Runtime, which Windows normally includes.
 - **macOS on Apple silicon (M1 or later):** open `Mars-EVA-Planner-mac.dmg` and drag the app to Applications. The app is not signed by Apple, so the first time, try to open it, then go to *System Settings > Privacy & Security* and choose *Open Anyway*.
