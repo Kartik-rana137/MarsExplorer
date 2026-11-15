@@ -20,7 +20,8 @@ sys.path.insert(0, str(BACKEND))
 from app.conditions import CLOCK_STRETCH, Conditions  # noqa: E402
 from app.mission import OverlayStore, PlanError, build_escape, build_plan, time_limit  # noqa: E402
 from app.planner import Planner, relative_speed, simplify, trace  # noqa: E402
-from app.relief import MAX_ZOOM, TILE_PX, ReliefTiles  # noqa: E402
+from app.relief import MAX_ZOOM, TILE_PX, ReliefTiles, height_grid  # noqa: E402
+from app.site import ROVER  # noqa: E402
 from app.terrain import Terrain  # noqa: E402
 
 DATA = BACKEND / "data"
@@ -146,6 +147,20 @@ class Helpers(unittest.TestCase):
         self.assertAlmostEqual(late["limit_min"], (1100 - 900) * CLOCK_STRETCH - 60, places=1)
 
 
+class RoverSpec(unittest.TestCase):
+    """The base rover used by the drive mode: a crew of three, with its mass the sum of the listed parts."""
+
+    def test_mass_is_the_sum_of_the_buildup_and_carries_three_crew(self):
+        self.assertEqual(ROVER["crew"], 3)
+        self.assertEqual(ROVER["mass_kg"], sum(part["kg"] for part in ROVER["mass_buildup"]))
+        self.assertTrue(4000 <= ROVER["mass_kg"] <= 8000)  # between the 2-crew SEV and much larger concepts
+
+    def test_mars_gravity_and_the_grip_it_allows(self):
+        self.assertAlmostEqual(ROVER["gravity_m_s2"], 3.73, places=2)
+        grip = ROVER["traction_coefficient"] * ROVER["gravity_m_s2"]       # best braking or cornering, m/s^2
+        self.assertLess(grip, 0.4 * ROVER["traction_coefficient"] * 9.81)  # under 40 % of the same tyres on Earth
+
+
 def decode_terrain_png(data: bytes) -> np.ndarray:
     """Heights in metres from a terrain-RGB PNG written by app.png.png_rgb (one IDAT chunk, no row filters)."""
     import struct
@@ -189,6 +204,14 @@ class ReliefOnARamp(unittest.TestCase):
         centre_lat = np.degrees(np.arctan(np.sinh(np.pi * (1.0 - 2.0 * centre[1]))))
         expected = float(self.relief.heights(np.array([centre_lat]), np.array([centre_lon]))[0]) - self.relief.base_m
         self.assertAlmostEqual(float(heights[TILE_PX // 2, TILE_PX // 2]), expected, delta=0.06)
+
+    def test_height_grid_round_trips_within_one_step(self):
+        import gzip
+        info, data = height_grid(self.terrain)
+        values = np.frombuffer(gzip.decompress(data), dtype="<u2").reshape(info["rows"], info["cols"])
+        decoded = info["offset_m"] + values * info["step_m"]
+        self.assertLessEqual(float(np.abs(decoded - self.terrain.elev).max()), info["step_m"] / 2 + 1e-6)
+        self.assertEqual((info["lat_north"], info["lon_west"]), (self.terrain.lat_north, self.terrain.lon_west))
 
     def test_only_real_tile_addresses_are_served(self):
         self.assertTrue(ReliefTiles.valid(MAX_ZOOM, 0, 0))

@@ -1,4 +1,4 @@
-"""Elevation tiles for the 3-D map.
+"""Elevation for the 3-D map (terrain tiles) and for the drive mode (the whole grid).
 
 The map library drapes imagery over a terrain mesh that it builds from "terrain-RGB" tiles: ordinary
 256 x 256 Web Mercator map tiles whose pixel colours encode a height,
@@ -13,6 +13,7 @@ metres. That avoids a cliff around the study area without inventing detail.
 """
 from __future__ import annotations
 
+import gzip
 import math
 from functools import lru_cache
 
@@ -89,3 +90,25 @@ class ReliefTiles:
     @staticmethod
     def valid(z: int, x: int, y: int) -> bool:
         return 0 <= z <= MAX_ZOOM and 0 <= x < 2 ** z and 0 <= y < 2 ** z
+
+
+def height_grid(terrain: Terrain) -> tuple[dict, bytes]:
+    """The whole elevation grid for the drive mode, as gzip-compressed unsigned 16-bit integers (little-endian).
+
+    height_m = offset_m + value * step_m. Row 0 is the northern edge, as in the terrain grid. The step is the finest
+    that keeps the study area's height range inside 16 bits (2 cm here).
+    """
+    elev = terrain.elev.astype(np.float64)
+    offset = math.floor(float(elev.min()))
+    step = max(0.01, math.ceil((float(elev.max()) - offset) / 65_000.0 * 100.0) / 100.0)
+    values = np.rint((elev - offset) / step)
+    if values.max() > 65_535:
+        raise ValueError("height range does not fit in 16 bits")
+    data = gzip.compress(values.astype("<u2").tobytes(), compresslevel=6)
+    info = {
+        "rows": terrain.rows, "cols": terrain.cols,
+        "lat_north": terrain.lat_north, "lon_west": terrain.lon_west, "cell_deg": terrain.cell_deg,
+        "cell_east_m": terrain.dx, "cell_north_m": terrain.dy,
+        "offset_m": offset, "step_m": step,
+    }
+    return info, data

@@ -20,7 +20,7 @@ from .conditions import Conditions
 from .mission import OverlayStore, PlanError, build_escape, build_plan
 from .photos import PhotoService
 from .planner import Planner
-from .relief import MAX_ZOOM as RELIEF_MAX_ZOOM, ReliefTiles
+from .relief import MAX_ZOOM as RELIEF_MAX_ZOOM, ReliefTiles, height_grid
 from .terrain import Terrain
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -30,6 +30,7 @@ FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
 terrain = Terrain.load(DATA_DIR)
 planner = Planner(terrain)
 relief = ReliefTiles(terrain)
+heights_info, heights_gzip = height_grid(terrain)  # about 1.5 MB compressed, built once
 conditions = Conditions(DATA_DIR)
 rover = json.loads((DATA_DIR / "rover.json").read_text(encoding="utf-8"))
 photos = PhotoService(DATA_DIR, rover["stops"])
@@ -100,7 +101,10 @@ def get_site() -> dict:
         "grid": {"rows": terrain.rows, "cols": terrain.cols, "cell_m": terrain.meta["cell_m"],
                  "elev_min": terrain.meta["elev_min"], "elev_max": terrain.meta["elev_max"]},
         "tiles": site.TILES,
-        "terrain_tiles": {"url": "/api/terrain/{z}/{x}/{y}.png", "max_zoom": RELIEF_MAX_ZOOM, "encoding": "mapbox"},
+        "terrain_tiles": {"url": "/api/terrain/{z}/{x}/{y}.png", "max_zoom": RELIEF_MAX_ZOOM, "encoding": "mapbox",
+                          "base_m": relief.base_m},
+        "elevation_grid": {"url": "/api/terrain/heights.bin", **heights_info},
+        "vehicle": site.ROVER,
         "slope_layer": {"url": "/overlays/slope.png", "bounds": terrain.bounds,
                         "classes_deg": terrain.meta["slope_classes_deg"], "colours": terrain.meta["slope_colours"],
                         "method": terrain.meta["slope_method"]},
@@ -163,6 +167,13 @@ def get_overlay(key: str) -> Response:
     if image is None:
         raise HTTPException(status_code=404, detail="overlay expired; request the plan again")
     return Response(content=image, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/api/terrain/heights.bin")
+def get_height_grid() -> Response:
+    """The whole elevation grid (see `elevation_grid` in /api/site for its layout), for the drive mode's physics."""
+    return Response(content=heights_gzip, media_type="application/octet-stream",
+                    headers={"Content-Encoding": "gzip", "Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/api/terrain/{z}/{x}/{y}.png")

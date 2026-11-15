@@ -46,4 +46,15 @@ export const api = {
   escape: (camp: { lat: number; lon: number }, position: { lat: number; lon: number }, params: Params, signal?: AbortSignal) =>
     post<Escape>("/api/escape", { camp, position, params }, signal),
   photos: (lat: number, lon: number) => request<PhotoResult>(`/api/photos?lat=${lat}&lon=${lon}`),
+  /** Raw bytes, for the packed elevation grid. */
+  binary: async (path: string): Promise<ArrayBuffer> => {
+    let response: Response;
+    try {
+      response = await fetch(BASE + path);
+    } catch {
+      throw new ApiError("Cannot reach the planning backend.");
+    }
+    if (!response.ok) throw new ApiError(`${response.status} ${response.statusText}`);
+    return response.arrayBuffer();
+  },
 };

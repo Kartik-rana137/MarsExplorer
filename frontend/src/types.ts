@@ -1,6 +1,15 @@
 // Shapes of the backend API responses (see backend/app/main.py and mission.py).
+import type { GridInfo, VehicleSpec } from "./rover-physics";
 
 export type LatLon = [number, number];
+
+/** The base rover (backend/app/site.py): the numbers the physics uses, plus how they were arrived at. */
+export interface Vehicle extends VehicleSpec {
+  name: string;
+  mass_buildup: { what: string; kg: number; basis: string }[];
+  reference: { name: string; url: string };
+  mars_source: { name: string; url: string };
+}
 export type Bounds = [LatLon, LatLon]; // [[south, west], [north, east]]
 
 export type ParamName =
@@ -86,8 +95,12 @@ export interface Site {
   bounds: Bounds;
   grid: { rows: number; cols: number; cell_m: number; elev_min: number; elev_max: number };
   tiles: Record<"context" | "basemap" | "labels", TileLayerInfo>;
-  /** Elevation as terrain-RGB map tiles, for the 3-D ground surface. */
-  terrain_tiles: { url: string; max_zoom: number; encoding: "mapbox" };
+  /** Elevation as terrain-RGB map tiles, for the 3-D ground surface. Heights in the tiles are above `base_m`. */
+  terrain_tiles: { url: string; max_zoom: number; encoding: "mapbox"; base_m: number };
+  /** The whole elevation grid as packed 16-bit heights, for the drive mode's physics. */
+  elevation_grid: GridInfo & { url: string };
+  /** The pressurised base rover the crew drives in the drive mode. */
+  vehicle: Vehicle;
   slope_layer: { url: string; bounds: Bounds; classes_deg: number[]; colours: string[]; method: string };
   validation: Validation | null;
   default_camp: { lat: number; lon: number; name: string; note: string };

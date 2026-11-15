@@ -9,6 +9,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { backendUrl } from "./api";
 import { h } from "./dom";
+import type { DriveResult, DriveSetup } from "./drive";
 import type { LatLon, Plan, Site, StopInput, Target, TileLayerInfo } from "./types";
 
 setWorkerUrl(workerUrl);
@@ -20,7 +21,11 @@ const EARTH_RADIUS_M = 6_378_137;
 export const RELIEF_STRETCH = 1.5;
 // The map library assumes a planet the size of Earth, so every horizontal distance comes out larger than it is
 // on Mars by the ratio of the radii. Heights are scaled by the same ratio to keep slopes true, then stretched.
-const EXAGGERATION = (EARTH_RADIUS_M / MARS_RADIUS_M) * RELIEF_STRETCH;
+const MAP_METRES_PER_MARS_METRE = EARTH_RADIUS_M / MARS_RADIUS_M;
+const EXAGGERATION = MAP_METRES_PER_MARS_METRE * RELIEF_STRETCH;
+
+/** What the drive mode needs from the app; the map adds what it knows itself. */
+export type DriveRequest = Pick<DriveSetup, "grid" | "vehicle" | "start" | "heading" | "maxParkSlopeDeg">;
 
 /** The tilted view the map opens in, and returns to from the 3D button. */
 const VIEW_3D = { pitch: 58, bearing: -18 };
@@ -57,6 +62,8 @@ export interface MapHandlers {
   onMoveStop: (index: number, lat: number, lon: number) => void;
   onRemoveStop: (index: number) => void;
   onPhotos: (lat: number, lon: number, label: string) => void;
+  /** Someone asked to drive the base rover (from base camp's menu). */
+  onDrive: () => void;
 }
 
 type GeoData = Exclude<Parameters<GeoJSONSource["setData"]>[0], string>;
@@ -210,6 +217,8 @@ export class MissionMap {
   /** Markers that belong to a switchable layer: Curiosity's sites, and the labels on lines. */
   private readonly layerMarkers: Record<LayerName, Marker[]> = { slope: [], reach: [], rings: [], storm: [], rover: [], labels: [] };
   private readonly visible: Record<LayerName, boolean> = { slope: true, reach: true, rings: false, storm: true, rover: true, labels: false };
+  /** True while the drive mode has the map: clicks on the ground then do nothing. */
+  private driving = false;
   // The map's drawing data loads a moment after the map is created; work that needs it waits here.
   private ready = false;
   private readonly waiting: (() => void)[] = [];
@@ -242,13 +251,23 @@ export class MissionMap {
     });
 
     this.buildRoverMarkers();
-    this.campMarker = this.draggable(teardrop("camp", campGlyph()), "Base camp (your rover and shelter): drag to move", 9, [site.default_camp.lon, site.default_camp.lat], {
+    this.campMarker = this.draggable(teardrop("camp", campGlyph()), "Base camp (your rover and shelter): drag to move, or click to drive it", 9, [site.default_camp.lon, site.default_camp.lat], {
       onDrop: (lat, lon) => this.handlers.onMoveCamp(lat, lon),
+      onClick: (marker) => {
+        const menu = h(
+          "div",
+          { class: "map-menu" },
+          h("strong", {}, "Base camp"),
+          h("p", {}, "The crew's pressurised rover, which is also their shelter."),
+          h("button", { type: "button", onclick: () => { this.closePopup(); this.handlers.onDrive(); } }, "Drive the rover in 3D"),
+        );
+        this.openMenu(marker.getLngLat(), menu, this.pinLift());
+      },
     });
 
     this.map.on("click", (event) => {
       // Only a click on the ground itself counts: markers handle their own clicks, and the map's buttons are not the map.
-      if (event.originalEvent.target !== this.map.getCanvas()) return;
+      if (this.driving || event.originalEvent.target !== this.map.getCanvas()) return;
       this.closePopup();
       this.openPointMenu(event.lngLat.lat, event.lngLat.lng);
     });
@@ -367,6 +386,37 @@ export class MissionMap {
   /** The map needs to be told when its container changes size. */
   invalidate(): void {
     this.map.resize();
+  }
+
+  /**
+   * Hand the map to the drive mode until the crew parks or cancels, then take it back and show where the rover
+   * ended up. The drive mode's code (and the 3D library it uses) is only downloaded the first time.
+   */
+  async drive(request: DriveRequest): Promise<DriveResult> {
+    const { drive } = await import("./drive");
+    const map = this.map;
+    const gestures = [map.dragPan, map.scrollZoom, map.boxZoom, map.dragRotate, map.keyboard, map.doubleClickZoom, map.touchZoomRotate, map.touchPitch];
+    const maxZoom = map.getMaxZoom();
+    this.closePopup();
+    this.driving = true;
+    gestures.forEach((gesture) => gesture.disable());
+    map.setMaxZoom(21); // the chase camera sits closer than the planner allows
+    this.campMarker.remove(); // the 3D rover is base camp now
+    map.getContainer().classList.add("is-driving");
+    let result: DriveResult = null;
+    try {
+      result = await drive({ ...request, map, container: map.getContainer(), mapScale: MAP_METRES_PER_MARS_METRE, reliefStretch: RELIEF_STRETCH, terrainBase: this.site.terrain_tiles.base_m });
+    } finally {
+      this.driving = false;
+      map.getContainer().classList.remove("is-driving");
+      gestures.forEach((gesture) => gesture.enable());
+      map.setMaxZoom(maxZoom);
+      const end = result ?? request.start;
+      this.campMarker.setLngLat([end.lon, end.lat]).addTo(map);
+      map.setPadding(this.cover());
+      map.easeTo({ center: [end.lon, end.lat], zoom: 16.4, pitch: VIEW_3D.pitch, duration: 1400 });
+    }
+    return result;
   }
 
   setLayerVisible(name: LayerName, visible: boolean): void {
