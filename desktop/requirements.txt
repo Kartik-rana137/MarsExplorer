@@ -1,0 +1,9 @@
+# Builds the Windows and Mac apps with Python 3.12 (see "Desktop and Android apps" in the README).
+fastapi
+uvicorn
+numpy
+scipy
+contourpy
+pywebview      # the app window: Edge WebView2 on Windows, WebKit on macOS
+pyinstaller
+pillow         # lets PyInstaller turn icon.png into the Windows and Mac icon formats

@@ -7,6 +7,7 @@ Interactive API docs are then at http://localhost:8001/docs
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -24,8 +25,11 @@ from .relief import MAX_ZOOM as RELIEF_MAX_ZOOM, ReliefTiles, height_grid
 from .terrain import Terrain
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = BACKEND_DIR / "data"
-FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
+# The desktop and Android apps (desktop/, android/) bundle the data and the built frontend elsewhere and say where.
+DATA_DIR = Path(os.environ.get("MARS_EVA_DATA_DIR") or BACKEND_DIR / "data")
+FRONTEND_DIST = Path(os.environ.get("MARS_EVA_FRONTEND_DIST") or BACKEND_DIR.parent / "frontend" / "dist")
+CACHE_DIR = os.environ.get("MARS_EVA_CACHE_DIR")  # somewhere writable, when DATA_DIR is not
+MAX_STOPS = 12
 
 terrain = Terrain.load(DATA_DIR)
 planner = Planner(terrain)
@@ -33,7 +37,7 @@ relief = ReliefTiles(terrain)
 heights_info, heights_gzip = height_grid(terrain)  # about 1.5 MB compressed, built once
 conditions = Conditions(DATA_DIR)
 rover = json.loads((DATA_DIR / "rover.json").read_text(encoding="utf-8"))
-photos = PhotoService(DATA_DIR, rover["stops"])
+photos = PhotoService(DATA_DIR, rover["stops"], cache_dir=Path(CACHE_DIR) / "photos" if CACHE_DIR else None)
 overlays = OverlayStore()
 
 app = FastAPI(title="Mars EVA planner API", version="1.0",
@@ -70,7 +74,7 @@ class Params(BaseModel):
 
 class PlanRequest(BaseModel):
     camp: Point
-    stops: list[Stop] = Field(default_factory=list, max_length=12)
+    stops: list[Stop] = Field(default_factory=list, description=f"Science stops, at most {MAX_STOPS}")
     params: Params = Field(default_factory=Params)
     sol: int | None = Field(None, description="Curiosity mission sol whose measured conditions to use; latest if omitted")
 
@@ -138,6 +142,9 @@ def get_history() -> dict:
 @app.post("/api/plan")
 def post_plan(request: PlanRequest) -> dict:
     """Plan the walk from base camp through the stops and back, with turn-back limits and the safe-return area."""
+    # Checked here rather than in the model: the Android app runs pydantic 1, which spells list limits differently.
+    if len(request.stops) > MAX_STOPS:
+        raise HTTPException(status_code=422, detail=f"Plan at most {MAX_STOPS} stops at a time.")
     try:
         with planner.lock:
             return build_plan(planner, conditions, overlays, request.camp, request.stops, request.params, request.sol)

@@ -24,8 +24,9 @@ MARS_RADIUS_M = 3_396_190.0
 
 
 class PhotoService:
-    def __init__(self, data_dir: Path, stops: list[dict]) -> None:
-        self.cache_dir = data_dir / "photos"
+    def __init__(self, data_dir: Path, stops: list[dict], cache_dir: Path | None = None) -> None:
+        self.bundled_dir = data_dir / "photos"        # lists shipped with the app
+        self.cache_dir = cache_dir or self.bundled_dir  # where new lists are saved
         self.stops = stops
         self._lat = np.array([s["lat"] for s in stops])
         self._lon = np.array([s["lon"] for s in stops])
@@ -59,13 +60,20 @@ class PhotoService:
             result["stop"] = {k: nearest_stop[k] for k in ("sol", "lat", "lon", "elev", "site", "drive")}
         return result
 
+    def _cached(self, name: str) -> list[dict] | None:
+        for folder in (self.cache_dir, self.bundled_dir):
+            if (folder / name).exists():
+                return json.loads((folder / name).read_text(encoding="utf-8"))
+        return None
+
     def for_stop(self, stop: dict) -> list[dict]:
-        cache = self.cache_dir / f"{stop['site']}_{stop['drive']}.json"
-        if cache.exists():
-            return json.loads(cache.read_text(encoding="utf-8"))
+        name = f"{stop['site']}_{stop['drive']}.json"
+        cache = self.cache_dir / name
+        if (photos := self._cached(name)) is not None:
+            return photos
         with self._lock:
-            if cache.exists():
-                return json.loads(cache.read_text(encoding="utf-8"))
+            if (photos := self._cached(name)) is not None:
+                return photos
             last_sol = stop["sol"] + MAX_SOLS_PER_STOP - 1
             if stop.get("next_sol"):
                 last_sol = min(last_sol, max(stop["sol"], stop["next_sol"] - 1))

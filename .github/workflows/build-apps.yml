@@ -1,0 +1,171 @@
+# Builds the planner as apps for Windows, macOS and Android, and checks each one starts and plans a walk.
+# Runs on pushes to the app-builds branch, on version tags (v1.0.0 ...), and from the Actions tab ("Run workflow").
+# The apps are attached to each run under "Artifacts"; for a version tag they are also published as a release.
+name: Build apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [app-builds]
+    tags: ["v*"]
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - name: Drive-mode physics tests
+        run: npm test
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: frontend/dist
+
+  desktop:
+    name: ${{ matrix.name }}
+    needs: frontend
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows app
+            os: windows-latest
+            artifact: windows-app
+          - name: Mac app
+            os: macos-latest  # Apple silicon
+            artifact: mac-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: frontend/dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r desktop/requirements.txt
+      - name: Backend tests
+        run: python -m unittest discover -s tests
+        working-directory: backend
+      - run: pyinstaller desktop/mars-eva-planner.spec --noconfirm
+
+      - name: Check the Windows app plans a walk
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $run = Start-Process dist\MarsEVAPlanner.exe -ArgumentList "--check" -Wait -PassThru
+          Get-Content "$env:LOCALAPPDATA\Mars EVA Planner\log.txt" -ErrorAction SilentlyContinue
+          if ($run.ExitCode -ne 0) { throw "The app's self-check failed (exit code $($run.ExitCode))" }
+          New-Item -ItemType Directory out | Out-Null
+          Copy-Item dist\MarsEVAPlanner.exe out\
+      - name: Check the Mac app plans a walk, and pack it in a disk image
+        if: runner.os == 'macOS'
+        run: |
+          "dist/Mars EVA Planner.app/Contents/MacOS/Mars EVA Planner" --check
+          mkdir -p dmg out
+          cp -R "dist/Mars EVA Planner.app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Mars EVA Planner" -srcfolder dmg -ov -format UDZO out/Mars-EVA-Planner-mac.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: out/*
+          compression-level: 0  # already compressed
+
+  android:
+    name: Android app
+    needs: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: frontend/dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"  # the app's Python; Chaquopy also needs it to install the app's packages
+      - name: Backend tests on the app's package versions
+        run: |
+          pip install -r ../android/app/requirements.txt
+          python -m unittest discover -s tests
+        working-directory: backend
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Build the app
+        working-directory: android
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle.log || {
+            # Job logs need a sign-in with admin rights to read; repeat the error as an annotation on the run page.
+            { sed -n '/What went wrong/,/Try:/p' gradle.log | head -60; grep -E "error:|ERROR:|FAILED" gradle.log | head -30; } > error.txt
+            python3 ../.github/annotate.py "Android build" error.txt
+            exit 1
+          }
+      - run: |
+          mkdir out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/Mars-EVA-Planner-android.apk
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-app
+          path: out/*
+          compression-level: 0
+
+      - name: Let the emulator use hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Check the app plans a walk on an Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash android/smoke-test.sh out/Mars-EVA-Planner-android.apk smoke
+      - name: Keep the emulator's screen and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-check
+          path: smoke/
+          if-no-files-found: ignore
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [desktop, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-app"
+          merge-multiple: true
+          path: release
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

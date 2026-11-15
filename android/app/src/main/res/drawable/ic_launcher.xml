@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app icon: the planner's Mars disc with craters (as in desktop/icon.png). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path android:fillColor="#7A2A08" android:pathData="M24,3a21,21 0,1 1,0 42a21,21 0,1 1,0 -42z" />
+    <path android:fillColor="#C1440E" android:pathData="M22.5,4a19.5,19.5 0,1 1,0 39a19.5,19.5 0,1 1,0 -39z" />
+    <path android:fillColor="#D9592A" android:pathData="M19,8a11,11 0,1 1,0 22a11,11 0,1 1,0 -22z" />
+    <path android:fillColor="#8A2E0C" android:pathData="M17.3,14.4a4,4 0,1 1,0 8a4,4 0,1 1,0 -8z" />
+    <path android:fillColor="#8A2E0C" android:pathData="M28.8,24.5a5.3,5.3 0,1 1,0 10.6a5.3,5.3 0,1 1,0 -10.6z" />
+    <path android:fillColor="#8A2E0C" android:pathData="M32,13.6a2.4,2.4 0,1 1,0 4.8a2.4,2.4 0,1 1,0 -4.8z" />
+    <path android:fillColor="#8A2E0C" android:pathData="M16,29.8a2.2,2.2 0,1 1,0 4.4a2.2,2.2 0,1 1,0 -4.4z" />
+</vector>

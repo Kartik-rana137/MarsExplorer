@@ -10,6 +10,17 @@ backend/data/cache/
 frontend/node_modules/
 frontend/dist/
 
+# App builds (desktop/ and android/)
+desktop/.venv/
+desktop/build/
+desktop/dist/
+/build/
+/dist/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
 # OS
 .DS_Store
 Thumbs.db
