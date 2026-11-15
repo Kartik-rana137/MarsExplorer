@@ -87,7 +87,7 @@ frontend/  TypeScript. Draws the map, panels and charts and sends the plan to th
 | Rover stops, driven path, tilt | [Curiosity waypoints](https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints.json) and traverse | NASA/JPL-Caltech |
 | Temperature, pressure, UV, sunrise, sunset | [REMS daily weather report](https://mars.nasa.gov/rss/api/?feed=weather&category=msl&feedtype=json), 4,745 sols | NASA/JPL-Caltech/CAB |
 | Radiation dose rate, May 2024 solar storm | [RAD reduced data records](https://pds-ppi.igpp.ucla.edu/data/MSL-M-RAD-3-RDR-V1.0/) | NASA PDS Planetary Plasma Interactions node / SwRI |
-| Ground photos | [Curiosity raw images](https://mars.nasa.gov/msl/multimedia/raw-images/) | NASA/JPL-Caltech |
+| Ground photos | [Curiosity raw images](https://mars.nasa.gov/msl/multimedia/raw-images/) | NASA/JPL-Caltech (Navcam), NASA/JPL-Caltech/MSSS (Mastcam) |
 
 Site names and descriptions come from NASA's Curiosity mission blog (links are in the map popups).
 
@@ -204,7 +204,28 @@ docs/          screenshots of the planner and the drive mode
 
 ## Credits
 
-Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, MSSS, CAB, SwRI and the PDS. Map library: MapLibre GL JS. 3D rover: three.js.
+**Data and imagery.** Each dataset and who made it is listed under [NASA data used](#nasa-data-used). Some of it belongs to NASA's partners rather than to NASA, and is used here under the owner's terms:
+
+| Material | Owner | Terms |
+|---|---|---|
+| Navcam photos, place names, rover path and other NASA/JPL-Caltech material | NASA/JPL | [JPL image use policy](https://www.jpl.nasa.gov/jpl-image-use-policy): free for any use with credit, without implying NASA endorsement |
+| HiRISE colour imagery | University of Arizona | [Public domain](https://uahirise.org/media/usage.php); credit requested |
+| CTX regional imagery, Mastcam photos | Malin Space Science Systems (MSSS) | [Free for educational and personal use](https://www.msss.com/policies/index.html), with credit |
+| 1 m elevation model | USGS Astrogeology | Public domain (US government work) |
+| REMS weather, RAD radiation | CAB (Spain), SwRI | Mission data published by NASA |
+
+This is a non-commercial hackathon entry. Commercial use of the partners' images may need the owner's permission.
+
+The Mars gravity and air density come from [NASA's Mars fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html). The Space Exploration Vehicle's mass (about 3,000 kg) comes from [Wikipedia](https://en.wikipedia.org/wiki/Space_Exploration_Vehicle); only that figure is used.
+
+**Software.** All of these are open source and installed by npm or pip, not copied into this repository.
+
+- Frontend: [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) for the map and [three.js](https://threejs.org/) (MIT) for the 3D rover, built with Vite (MIT) and TypeScript (Apache 2.0).
+- Backend: FastAPI (MIT), uvicorn, numpy, scipy, contourpy and imagecodecs (BSD-3-Clause).
+
+**Icons.** The interface icons are Google's [Material Design icons](https://github.com/google/material-design-icons), used under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). Their outlines are copied into [frontend/src/dom.ts](frontend/src/dom.ts).
+
+**Made for this project.** The 3D rover model is built in code, the engine sound is generated as you drive, and the favicon, dashboard and screenshots are our own. No font files are shipped: the app uses fonts already on the viewer's device.
 
 ## Team:
 
