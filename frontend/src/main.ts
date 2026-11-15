@@ -25,6 +25,27 @@ import "./style.css";
 const PLAN_DELAY_MS = 180;
 const PHONE_WIDTH = 760; // below this the panel is a sheet under the map instead of floating over it
 
+function setupThemeToggle(): void {
+  const button = byId<HTMLButtonElement>("theme-toggle");
+  let theme: "light" | "dark" = localStorage.getItem("mars-eva-theme") === "dark" ? "dark" : "light";
+
+  const render = () => {
+    const dark = theme === "dark";
+    document.documentElement.dataset.theme = theme;
+    button.replaceChildren(icon(dark ? "sun" : "moon", 18));
+    button.title = dark ? "Switch to light mode" : "Switch to dark mode";
+    button.setAttribute("aria-label", button.title);
+    button.setAttribute("aria-pressed", String(dark));
+  };
+
+  button.addEventListener("click", () => {
+    theme = theme === "dark" ? "light" : "dark";
+    render();
+    localStorage.setItem("mars-eva-theme", theme);
+  });
+  render();
+}
+
 async function start(): Promise<void> {
   let site: Site;
   try {
@@ -249,4 +270,5 @@ async function start(): Promise<void> {
 window.addEventListener("error", (event) => showVerdict("no-go", `Unexpected error: ${event.message}`));
 window.addEventListener("unhandledrejection", (event) => showVerdict("no-go", `Unexpected error: ${String(event.reason)}`));
 
+setupThemeToggle();
 void start();
