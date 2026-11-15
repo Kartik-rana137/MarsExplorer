@@ -1,4 +1,4 @@
-# MarsExplorer
+# Mars Explorer
 
 NASA Space Apps Hackathon entry: **Mars EVA Planner**, a planning screen a Mars crew would use in the habitat before walking out to study the boxwork formations on Mount Sharp, Gale Crater.
 
@@ -156,7 +156,7 @@ docs/          screenshot
 
 Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, MSSS, CAB, SwRI and the PDS. Map library: MapLibre GL JS.
 
-Team:
+##Team:
 
 Kartik Rana (Lead dev)
 
