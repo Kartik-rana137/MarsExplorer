@@ -20,6 +20,7 @@ from .conditions import Conditions
 from .mission import OverlayStore, PlanError, build_escape, build_plan
 from .photos import PhotoService
 from .planner import Planner
+from .relief import MAX_ZOOM as RELIEF_MAX_ZOOM, ReliefTiles
 from .terrain import Terrain
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -28,6 +29,7 @@ FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
 
 terrain = Terrain.load(DATA_DIR)
 planner = Planner(terrain)
+relief = ReliefTiles(terrain)
 conditions = Conditions(DATA_DIR)
 rover = json.loads((DATA_DIR / "rover.json").read_text(encoding="utf-8"))
 photos = PhotoService(DATA_DIR, rover["stops"])
@@ -98,6 +100,7 @@ def get_site() -> dict:
         "grid": {"rows": terrain.rows, "cols": terrain.cols, "cell_m": terrain.meta["cell_m"],
                  "elev_min": terrain.meta["elev_min"], "elev_max": terrain.meta["elev_max"]},
         "tiles": site.TILES,
+        "terrain_tiles": {"url": "/api/terrain/{z}/{x}/{y}.png", "max_zoom": RELIEF_MAX_ZOOM, "encoding": "mapbox"},
         "slope_layer": {"url": "/overlays/slope.png", "bounds": terrain.bounds,
                         "classes_deg": terrain.meta["slope_classes_deg"], "colours": terrain.meta["slope_colours"],
                         "method": terrain.meta["slope_method"]},
@@ -160,6 +163,14 @@ def get_overlay(key: str) -> Response:
     if image is None:
         raise HTTPException(status_code=404, detail="overlay expired; request the plan again")
     return Response(content=image, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/api/terrain/{z}/{x}/{y}.png")
+def get_terrain_tile(z: int, x: int, y: int) -> Response:
+    """Elevation as a terrain-RGB map tile, used by the 3-D map to build the ground surface."""
+    if not relief.valid(z, x, y):
+        raise HTTPException(status_code=404, detail="no such terrain tile")
+    return Response(content=relief.tile(z, x, y), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 app.mount("/overlays", StaticFiles(directory=DATA_DIR / "overlays"), name="overlays")

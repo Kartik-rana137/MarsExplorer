@@ -4,9 +4,11 @@ NASA Space Apps Hackathon entry: **Mars EVA Planner**, a planning screen a Mars 
 
 The crew picks a base camp and science stops on the map. The planner finds a walking route that avoids steep ground, checks it against life support and daylight, and draws the **turn-back line**: the farthest the crew can go, do the planned work, and still walk back in time. Everything is computed from data NASA's Curiosity rover and orbiters collected at this exact place.
 
-![The planner: a full-screen map of Mount Sharp with a floating panel showing the verdict, the walk's total time and the list of stops](docs/screenshot.png)
+![The planner: a tilted 3D view of Mount Sharp with the walk draped over the terrain, and a floating panel showing the verdict, the walk's total time and the list of stops](docs/screenshot.png)
 
 The screen is written for people with no space background and laid out like a consumer maps app: a full-screen map with one floating panel. The panel shows only what is needed to decide (the verdict, the total time and distance, and the list of stops, like a directions list). Everything else opens on request: walk settings, the day's weather, the solar storm test, charts along the route, map layers and photos of a place.
+
+The map is 3D, in the manner of a globe viewer: NASA's imagery is draped over the real shape of the ground, built from the same 1 m elevation data the planner uses. Drag to move, scroll to zoom, and right-drag (or hold Ctrl and drag) to tilt and turn the view. The route, the turn-back line and the storm limit follow the terrain, and a 2D button returns to a plain top-down map.
 
 ## What a crew can do with it
 
@@ -69,8 +71,9 @@ frontend/  TypeScript. Draws the map, panels and charts and sends the plan to th
 | `POST /api/plan` | Route, timings, verdict, turn-back point, storm exposure, safe-return area |
 | `POST /api/escape` | Fastest way back to base camp from a position, judged against the storm warning |
 | `GET /api/photos?lat=&lon=` | Curiosity's photos from its nearest stop |
+| `GET /api/terrain/{z}/{x}/{y}.png` | Elevation as terrain-RGB map tiles, from which the 3D ground surface is built |
 
-**Frontend** (TypeScript, Vite, Leaflet, no UI framework): holds only the plan being edited. `src/types.ts` mirrors the API responses.
+**Frontend** (TypeScript, Vite, MapLibre GL for the 3D map, no UI framework): holds only the plan being edited. `src/types.ts` mirrors the API responses.
 
 ## NASA data used
 
@@ -108,6 +111,7 @@ At Curiosity's 263 stops inside the study area, the terrain grid differs from th
 ## Limits to know about
 
 - Slopes come from 1 m elevation data. Rocks and ledges smaller than a few metres, and soft sand, are not seen.
+- The 3D view draws heights 1.5 times taller than life so low ridges are easy to see. Outside the framed study area there is no elevation data, so the ground there simply continues the area's overall tilt. The 3D map needs a browser with WebGL.
 - The walking model was derived for hikers on Earth. Suited walking on Mars is uncertain, which is why speed and slope limit are settings.
 - Conditions are a replay of measured sols, not a forecast. Weather is daily minimum and maximum only.
 - Background radiation is one reading every second sol, smoothed over 40 sols. The storm drill uses one recorded event and counts dose outdoors only; shielding inside the shelter is not modelled.
@@ -130,7 +134,7 @@ The elevation file is 3.9 GB, so `build_terrain.py` downloads only the rows that
 ## Tests
 
 ```powershell
-backend\.venv\Scripts\python -m unittest discover -s backend/tests -v   # planner and mission logic, 20 tests
+backend\.venv\Scripts\python -m unittest discover -s backend/tests -v   # planner, mission logic and terrain tiles, 24 tests
 cd frontend; npm run typecheck                                          # TypeScript
 ```
 
@@ -139,7 +143,7 @@ cd frontend; npm run typecheck                                          # TypeSc
 ```
 backend/
   app/         API (main.py), route search (planner.py), mission logic (mission.py),
-               conditions, photos, terrain, site description
+               conditions, photos, terrain, terrain tiles for the 3D map (relief.py), site description
   pipeline/    scripts that build backend/data from NASA sources
   data/        prepared data: terrain grid, weather, radiation, rover stops, photo lists
   tests/
@@ -150,4 +154,4 @@ docs/          screenshot
 
 ## Credits
 
-Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, MSSS, CAB, SwRI and the PDS. Map library: Leaflet.
+Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, MSSS, CAB, SwRI and the PDS. Map library: MapLibre GL JS.

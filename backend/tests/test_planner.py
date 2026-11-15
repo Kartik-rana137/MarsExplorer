@@ -20,6 +20,7 @@ sys.path.insert(0, str(BACKEND))
 from app.conditions import CLOCK_STRETCH, Conditions  # noqa: E402
 from app.mission import OverlayStore, PlanError, build_escape, build_plan, time_limit  # noqa: E402
 from app.planner import Planner, relative_speed, simplify, trace  # noqa: E402
+from app.relief import MAX_ZOOM, TILE_PX, ReliefTiles  # noqa: E402
 from app.terrain import Terrain  # noqa: E402
 
 DATA = BACKEND / "data"
@@ -143,6 +144,56 @@ class Helpers(unittest.TestCase):
         late = time_limit(params(start_clock_min=900), cond)
         self.assertEqual(late["limited_by"], "daylight")
         self.assertAlmostEqual(late["limit_min"], (1100 - 900) * CLOCK_STRETCH - 60, places=1)
+
+
+def decode_terrain_png(data: bytes) -> np.ndarray:
+    """Heights in metres from a terrain-RGB PNG written by app.png.png_rgb (one IDAT chunk, no row filters)."""
+    import struct
+    import zlib
+    start = data.index(b"IDAT")
+    length = struct.unpack(">I", data[start - 4:start])[0]
+    raw = np.frombuffer(zlib.decompress(data[start + 4:start + 4 + length]), dtype=np.uint8).reshape(TILE_PX, TILE_PX * 3 + 1)
+    rgb = raw[:, 1:].reshape(TILE_PX, TILE_PX, 3).astype(np.int64)
+    return -10000.0 + (rgb[..., 0] * 65536 + rgb[..., 1] * 256 + rgb[..., 2]) * 0.1
+
+
+class ReliefOnARamp(unittest.TestCase):
+    """Elevation tiles for the 3-D map, checked on a uniform ramp that rises 0.4 m per cell eastward."""
+
+    def setUp(self):
+        elev = np.tile(np.arange(50, dtype=np.float32) * CELL * 0.10, (40, 1))
+        self.terrain = make_terrain(elev, np.zeros((40, 50), dtype=np.float32))
+        self.relief = ReliefTiles(self.terrain)
+
+    def test_heights_match_the_grid_at_cell_centres(self):
+        lat, lon = self.terrain.latlon(np.array([10 * 50 + 5, 30 * 50 + 44]))
+        self.assertTrue(np.allclose(self.relief.heights(lat, lon), [5 * 0.4, 44 * 0.4], atol=1e-3))
+
+    def test_ground_outside_the_grid_continues_the_slope_without_a_step(self):
+        lat, lon = self.terrain.latlon(np.array([10 * 50 + 0]))
+        just_outside = self.relief.heights(lat, lon - 1.0 * CELL_DEG)   # one cell west of the westernmost cell centre
+        far_outside = self.relief.heights(lat, lon - 100.0 * CELL_DEG)
+        self.assertAlmostEqual(float(just_outside[0]), -0.4, delta=0.05)  # the ramp simply carries on
+        self.assertAlmostEqual(float(far_outside[0]), -40.0, delta=0.5)
+
+    def test_tile_encodes_the_same_heights_and_never_goes_negative(self):
+        lat, lon = self.terrain.latlon(np.array([20 * 50 + 25]))
+        n = 2 ** MAX_ZOOM
+        x = int((float(lon[0]) + 180.0) / 360.0 * n)
+        y = int((1.0 - np.arcsinh(np.tan(np.radians(float(lat[0])))) / np.pi) / 2.0 * n)
+        heights = decode_terrain_png(self.relief.tile(MAX_ZOOM, x, y))
+        self.assertGreaterEqual(float(heights.min()), 0.0)
+        # The centre pixel of the tile, recomputed directly.
+        centre = (np.array([x, y]) + (TILE_PX // 2 + 0.5) / TILE_PX) / n
+        centre_lon = centre[0] * 360.0 - 180.0
+        centre_lat = np.degrees(np.arctan(np.sinh(np.pi * (1.0 - 2.0 * centre[1]))))
+        expected = float(self.relief.heights(np.array([centre_lat]), np.array([centre_lon]))[0]) - self.relief.base_m
+        self.assertAlmostEqual(float(heights[TILE_PX // 2, TILE_PX // 2]), expected, delta=0.06)
+
+    def test_only_real_tile_addresses_are_served(self):
+        self.assertTrue(ReliefTiles.valid(MAX_ZOOM, 0, 0))
+        self.assertFalse(ReliefTiles.valid(MAX_ZOOM + 1, 0, 0))
+        self.assertFalse(ReliefTiles.valid(3, 8, 0))
 
 
 @unittest.skipUnless((DATA / "terrain.npz").exists() and (DATA / "weather.json").exists(), "study-area data not built")

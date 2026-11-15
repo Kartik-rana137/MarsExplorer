@@ -86,6 +86,8 @@ export interface Site {
   bounds: Bounds;
   grid: { rows: number; cols: number; cell_m: number; elev_min: number; elev_max: number };
   tiles: Record<"context" | "basemap" | "labels", TileLayerInfo>;
+  /** Elevation as terrain-RGB map tiles, for the 3-D ground surface. */
+  terrain_tiles: { url: string; max_zoom: number; encoding: "mapbox" };
   slope_layer: { url: string; bounds: Bounds; classes_deg: number[]; colours: string[]; method: string };
   validation: Validation | null;
   default_camp: { lat: number; lon: number; name: string; note: string };

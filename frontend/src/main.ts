@@ -51,22 +51,26 @@ async function start(): Promise<void> {
   const panel = byId("panel");
   const toggle = byId("panel-toggle");
   toggle.append(icon("chevronLeft", 20));
-  toggle.addEventListener("click", () => {
-    const hidden = app.classList.toggle("panel-hidden");
+  /** Hide or show the panel, and let the map re-centre on the part of it that is left visible. */
+  const setPanelHidden = (hidden: boolean) => {
+    if (app.classList.contains("panel-hidden") === hidden) return;
+    app.classList.toggle("panel-hidden", hidden);
     toggle.setAttribute("aria-expanded", String(!hidden));
     toggle.title = hidden ? "Show the panel" : "Hide the panel";
     toggle.setAttribute("aria-label", toggle.title);
-  });
+    map.updateInsets();
+  };
+  toggle.addEventListener("click", () => setPanelHidden(!app.classList.contains("panel-hidden")));
   /** Part of the map covered by the panel (left) and the chips (top). */
   const insets = () => {
     const floating = window.innerWidth > PHONE_WIDTH && !app.classList.contains("panel-hidden");
-    return { left: floating ? panel.getBoundingClientRect().right : 0, top: 52 };
+    return { left: floating ? panel.offsetLeft + panel.offsetWidth : 0, top: 52 };
   };
 
   // ---- views -----------------------------------------------------------------------------------------
   const photos = new PhotosPanel();
   const showPhotos = async (lat: number, lon: number, where: string) => {
-    app.classList.remove("panel-hidden");
+    setPanelHidden(false);
     photos.loading(where);
     try {
       photos.show(where, await api.photos(lat, lon));
@@ -124,7 +128,7 @@ async function start(): Promise<void> {
 
   // Chips over the map are shortcuts into those sections.
   const openFromChip = (section: typeof daySection) => {
-    app.classList.remove("panel-hidden");
+    setPanelHidden(false);
     openSection(section);
   };
   const dayChip = addChip("calendar", "Day on Mars", () => openFromChip(daySection));
@@ -151,7 +155,10 @@ async function start(): Promise<void> {
   buildAbout(site);
 
   api.history().then((history) => conditions.setHistory(history)).catch(() => undefined);
-  new ResizeObserver(() => map.invalidate()).observe(byId("map"));
+  new ResizeObserver(() => {
+    map.invalidate();
+    map.updateInsets(); // the panel floats over the map on wide screens and sits under it on phones
+  }).observe(byId("map"));
 
   // ---- planning --------------------------------------------------------------------------------------
   let timer: number | undefined;
