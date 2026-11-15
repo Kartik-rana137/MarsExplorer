@@ -154,3 +154,4 @@ Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, M
 Team:
 Kartik Rana (Lead dev)
 Aditya Kumar(visualization)
+Aakash Rath (Frontend)
