@@ -15,6 +15,10 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: "dist",
       emptyOutDir: true,
+      chunkSizeWarningLimit: 1500, // the 3-D map library alone is about 1 MB (310 kB compressed)
+    },
+    worker: {
+      format: "es" as const, // the map library starts its background worker as a module
     },
   };
 });

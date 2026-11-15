@@ -4,7 +4,7 @@
 import { LineChart, type Band, type Tick } from "./charts";
 import { byId, clear, h, icon, type IconName } from "./dom";
 import { clock, clockAfter, CLOCK_STRETCH, distance, duration, fixed, label, temperatureRange } from "./format";
-import { MAP_COLOURS, type LayerName, type MissionMap } from "./map";
+import { MAP_COLOURS, RELIEF_STRETCH, type LayerName, type MissionMap } from "./map";
 import type { Conditions, Escape, History, ParamName, Params, PhotoResult, Plan, Site, StopInput, Verdict } from "./types";
 
 const VERDICT_LABEL: Record<Verdict, string> = { go: "Safe to go", marginal: "Tight", "no-go": "Not safe", none: "No route yet" };
@@ -649,6 +649,7 @@ export function buildAbout(site: Site): void {
     h(
       "ol",
       {},
+      h("li", {}, "Look around in 3D: drag to move, scroll to zoom, and right-drag (or hold Ctrl and drag) to tilt and turn the view. The 2D button looks straight down."),
       h("li", {}, "Click the map to add places to visit. The planner finds the quickest route that avoids steep ground."),
       h("li", {}, "Read the verdict at the top of the panel. The turn-back line on the map shows how far the crew can go and still get back in time."),
       h("li", {}, "Open \"Walk settings\" to change when the crew leaves, how fast they walk and how long their suits last."),
@@ -664,7 +665,12 @@ export function buildAbout(site: Site): void {
       h("tbody", {}, ...site.sources.map((s) => h("tr", {}, h("td", {}, s.what), h("td", {}, h("a", { href: s.url, target: "_blank", rel: "noopener" }, s.name)), h("td", {}, s.by)))),
     ),
     h("h3", {}, "The method in detail"),
-    h("ul", {}, ...site.model_notes.map((note) => h("li", {}, note))),
+    h(
+      "ul",
+      {},
+      ...site.model_notes.map((note) => h("li", {}, note)),
+      h("li", {}, `The 3D view is built from the same 1 m elevation data. It draws heights ${RELIEF_STRETCH} times taller than life so low ridges are easy to see; distances and walking times are not affected.`),
+    ),
     v
       ? h(
           "p",

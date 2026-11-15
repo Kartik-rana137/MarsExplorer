@@ -97,7 +97,7 @@ button {
 #map {
   position: absolute;
   inset: 0;
-  z-index: 0; /* keeps Leaflet's own layers below the panel */
+  z-index: 0; /* keeps the map's own markers and controls below the panel */
   background: #1c1512;
 }
 
@@ -965,52 +965,93 @@ th {
 
 /* ---- map --------------------------------------------------------------------------------------------- */
 
-.leaflet-container {
+.maplibregl-map {
   font: inherit;
   background: #1c1512;
 }
 
-.leaflet-bar {
-  border: 0 !important;
+/* Zoom, compass and 2D/3D buttons, bottom right. */
+.maplibregl-ctrl-group {
   border-radius: 8px;
-  box-shadow: var(--shadow);
   overflow: hidden;
 }
 
-.leaflet-bar a,
-.leaflet-bar a:hover {
+.maplibregl-ctrl-group:not(:empty) {
+  box-shadow: var(--shadow);
+}
+
+.maplibregl-ctrl-group button {
   width: 36px;
   height: 36px;
-  line-height: 36px;
-  color: var(--text-secondary);
-  border-bottom-color: var(--border);
 }
 
-.leaflet-right .leaflet-control {
-  margin-right: var(--gap);
+.maplibregl-ctrl-top-right .maplibregl-ctrl {
+  margin: var(--gap) var(--gap) 0 0;
 }
 
-.leaflet-top .leaflet-control {
-  margin-top: var(--gap);
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0 var(--gap) 10px 0;
 }
 
-.leaflet-control-attribution {
-  margin: 0 !important;
-  background: rgba(255, 255, 255, 0.75) !important;
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
+  margin: 0;
+  background: rgba(255, 255, 255, 0.75);
   color: var(--text-secondary);
   font-size: 10.5px;
 }
 
-.leaflet-popup-content-wrapper {
+.tilt-button {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* How to tilt and turn the view; shown for a short while over the middle of the visible map. */
+.view-hint {
+  position: absolute;
+  z-index: 3;
+  left: calc(50% + (var(--panel-width) + var(--gap)) / 2);
+  bottom: 40px;
+  transform: translateX(-50%);
+  padding: 7px 16px;
+  border-radius: 18px;
+  background: rgba(32, 33, 36, 0.82);
+  color: #ffffff;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .view-hint {
+    left: 50%;
+    bottom: 34px;
+  }
+}
+
+/* Markers are stacked among themselves only, so none can rise above the map's buttons and the Layers card. */
+.maplibregl-canvas-container {
+  isolation: isolate;
+}
+
+.maplibregl-popup {
+  z-index: 1; /* above the markers, below the map's buttons */
+}
+
+.maplibregl-popup-content {
+  padding: 14px 16px 12px;
   border-radius: 12px;
   box-shadow: var(--shadow);
   color: var(--text-primary);
-}
-
-.leaflet-popup-content {
-  margin: 14px 16px 12px;
   font-size: 14px;
   line-height: 1.4;
+}
+
+.maplibregl-popup-close-button {
+  padding: 2px 9px;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1.3;
 }
 
 .map-menu {
@@ -1050,11 +1091,17 @@ th {
   background: var(--accent-wash);
 }
 
-/* Map symbols. Leaflet places the outer ".pin" element with a CSS transform, so it must stay unstyled:
+/* Map symbols. The map places the outer ".pin" element with a CSS transform, so it must stay unstyled:
    shape, rotation and zoom scaling all go on the inner ".pin-body". --pin-scale is set from the zoom level. */
 .pin {
   background: none;
   border: 0;
+  cursor: pointer;
+}
+
+.pin-noclick,
+.pin-text {
+  pointer-events: none;
 }
 
 .pin-body {
@@ -1174,16 +1221,20 @@ th {
   background: rgba(77, 217, 232, 0.95);
 }
 
-.leaflet-tooltip.turnback-label {
+/* "Turn back by ..." beside the turn-back marker. */
+.turnback-label {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 3px 9px;
+  border-radius: 6px;
   background: var(--critical);
-  border: 0;
   color: #ffffff;
+  font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-}
-
-.leaflet-tooltip.turnback-label::before {
-  border-right-color: var(--critical);
 }
 
 .scale-bar {
