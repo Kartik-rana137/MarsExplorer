@@ -33,6 +33,46 @@ TILES = {
     },
 }
 
+# ---- the base rover, for the drive mode ------------------------------------------------------------------
+# Physical constants of Mars are measured values. The rover is an estimate for a crew of three, scaled from NASA's
+# Space Exploration Vehicle concept (two crew, commonly listed at about 3,000 kg), with a storm shelter added.
+MARS = {
+    "gravity_m_s2": 3.73,       # NASA Mars fact sheet, mean surface gravity (Earth: 9.81)
+    "air_density_kg_m3": 0.016,  # NASA Mars fact sheet, surface density (about 1.3 % of Earth's)
+}
+MARS_SOURCE = {"name": "NASA Mars fact sheet", "url": "https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html"}
+
+ROVER_MASS_BUILDUP = [  # (what, kg, how the figure was arrived at)
+    ("Chassis, six wheels, suspension and hub motors", 1500, "about half of the SEV's 3,000 kg, made sturdier for a third person"),
+    ("Pressurised cabin for three, with three suitports", 1600, "SEV-style cabin, lengthened for a third seat and bunk"),
+    ("Batteries for a three-day traverse", 900, "assumed"),
+    ("Life support, heating and cooling, computers and radios", 600, "assumed"),
+    ("Water wall round the bunks, used as a solar-storm shelter", 500, "assumed; doubles as drinking water"),
+    ("Crew of three", 240, "80 kg each"),
+    ("Three spacesuits", 375, "assumed 125 kg each"),
+    ("Food, water, oxygen and rock samples", 200, "assumed, three days for three people"),
+]
+
+ROVER = {
+    "name": "Base rover",
+    "crew": 3,
+    "mass_kg": sum(kg for _, kg, _ in ROVER_MASS_BUILDUP),
+    "mass_buildup": [{"what": what, "kg": kg, "basis": basis} for what, kg, basis in ROVER_MASS_BUILDUP],
+    "reference": {"name": "NASA Space Exploration Vehicle (2 crew, about 3,000 kg)",
+                  "url": "https://en.wikipedia.org/wiki/Space_Exploration_Vehicle"},
+    **MARS,
+    "mars_source": MARS_SOURCE,
+    # Size (metres). Wheels sit on three axles; front and rear axles both steer.
+    "length_m": 6.0, "width_m": 3.0, "height_m": 3.2,
+    "wheelbase_m": 3.8, "track_m": 2.8, "wheel_radius_m": 0.6, "suspension_travel_m": 0.35,
+    # Driving. Six 10 kW hub motors; electronically limited to 45 km/h (pressurised rover concepts plan 10-20 km/h).
+    "drive_power_w": 60_000, "max_drive_force_n": 15_000,
+    "top_speed_m_s": 12.5, "reverse_speed_m_s": 3.0, "max_steer_deg": 28,
+    # Ground contact on firm, dusty bedrock: peak grip and rolling resistance as fractions of the rover's weight.
+    "traction_coefficient": 0.6, "rolling_resistance": 0.06,
+    "drag_area_m2": 7.0,  # drag coefficient about 0.9 times a 3.0 x 2.6 m front
+}
+
 DEFAULT_CAMP = {"lat": -4.79985, "lon": 137.38354, "name": "Base camp (pressurised rover)",
                 "note": "Parked at Curiosity's Altadena drill site, on ground the rover has already driven."}
 DEFAULT_STOP_SITES = ("Nevado Sajama & Valle de la Luna", "Antofagasta crater & Atacama block")

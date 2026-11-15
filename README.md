@@ -20,6 +20,7 @@ The map is 3D, in the manner of a globe viewer: NASA's imagery is draped over th
 - **Plan against real conditions.** Pick any Martian day (sol) since 2012 and the planner uses the temperature, daylight and radiation Curiosity measured then.
 - **Look before you go.** For any point, see the photos Curiosity took from the nearest place it stood, labelled by compass direction.
 - **Share a plan.** Copy a link or save a JSON route file. Load a route file to restore its camp, stops, walk settings and sol.
+- **Drive the base rover.** Take the crew's pressurised rover for a drive in 3D with W, A, S and D, racing-game style, and park it where base camp should be. The planner then replans from the new spot. See [Driving the base rover](#driving-the-base-rover).
 
 ## How it answers the challenge
 
@@ -31,7 +32,7 @@ The map is 3D, in the manner of a globe viewer: NASA's imagery is draped over th
 | Suited mobility and a route that avoids obstacles | Walking speed set by the crew and slowed by slope; ground steeper than the crew's limit is no-go. |
 | A habitat display, tablet or HUD | A habitat planning screen. |
 | Rover point-of-view images | Curiosity's Navcam views in eight compass directions at its stops. |
-| Rovers and working in pairs | Base camp is modelled as a pressurised rover parked on ground Curiosity has already driven. |
+| Rovers and working in pairs | Base camp is a pressurised rover for a crew of three, which can be driven in 3D over the real terrain to choose where it parks. |
 
 ## Run it
 
@@ -73,8 +74,9 @@ frontend/  TypeScript. Draws the map, panels and charts and sends the plan to th
 | `POST /api/escape` | Fastest way back to base camp from a position, judged against the storm warning |
 | `GET /api/photos?lat=&lon=` | Curiosity's photos from its nearest stop |
 | `GET /api/terrain/{z}/{x}/{y}.png` | Elevation as terrain-RGB map tiles, from which the 3D ground surface is built |
+| `GET /api/terrain/heights.bin` | The whole elevation grid (16-bit, gzip, about 1.7 MB) for the drive mode's physics; its layout is in `/api/site` |
 
-**Frontend** (TypeScript, Vite, MapLibre GL for the 3D map, no UI framework): holds only the plan being edited. `src/types.ts` mirrors the API responses.
+**Frontend** (TypeScript, Vite, MapLibre GL for the 3D map, three.js for the drivable rover, no UI framework): holds only the plan being edited. `src/types.ts` mirrors the API responses.
 
 ## NASA data used
 
@@ -109,6 +111,44 @@ At Curiosity's 263 stops inside the study area, the terrain grid differs from th
 - Background dose rate at the surface follows the solar cycle: about 8.5 µGy/h in 2012, 13 µGy/h at solar minimum in 2020, and about 6 µGy/h in 2024 to 2026.
 - In the 20 May 2024 storm the dose rate rose from 5.5 to 351 µGy/h (64 times) within 54 minutes. Over 44 hours the event added about 1.7 mGy, as much as 13 sols of normal background.
 
+## Driving the base rover
+
+Press **Drive the rover** (or click the base camp pin). The planner steps aside and the crew's rover appears in 3D on the real ground, with a chase camera behind it.
+
+| Key | Does |
+|---|---|
+| W / S | Accelerate / brake, then reverse |
+| A / D | Steer (front and rear axles both turn) |
+| Space | Handbrake, for sliding turns |
+| Enter | Park here and make it base camp |
+| Esc | Cancel; base camp stays where it was |
+| C, M | Higher view; sound on or off |
+
+It plays like a racing game because Mars makes it one. The physics (`frontend/src/rover-physics.ts`) uses real Mars gravity, 3.73 m/s² ([NASA Mars fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html)). Tyres can only push as hard as the weight pressing them down allows, so with gravity at 38 % of Earth's, so is the grip:
+
+- **Braking** from 43 km/h takes about 29 m, against 11 m on Earth.
+- **Corners slide**: the tyres hold at most 2.2 m/s² sideways (Earth: 5.9).
+- **Crests throw the rover into the air**: where the ground falls away faster than Mars gravity pulls, the wheels leave it.
+- **Slopes**: the parking brake holds on ground up to 31° (where the slope's tangent equals the grip); steeper, the rover slides.
+
+Everything is a real force: motor power, grip, rolling resistance, the thin air's drag and gravity along the slope, on the same 4 m elevation grid the planner uses. The rover can only be parked on ground gentle enough for the crew to step out (the crew's slope limit). Its speed is electronically limited to 45 km/h, faster than pressurised rover concepts plan (10 to 20 km/h), for the game.
+
+**How heavy is the rover?** No three-person Mars rover has been built, so its mass is an estimate (`backend/app/site.py`), scaled from NASA's [Space Exploration Vehicle](https://en.wikipedia.org/wiki/Space_Exploration_Vehicle) concept, which is commonly listed at about 3,000 kg for two crew:
+
+| Part | kg |
+|---|---|
+| Chassis, six wheels, suspension and hub motors | 1,500 |
+| Pressurised cabin for three, with three suitports | 1,600 |
+| Batteries for a three-day traverse | 900 |
+| Life support, heating and cooling, computers and radios | 600 |
+| Water wall round the bunks, used as a solar-storm shelter | 500 |
+| Crew of three (80 kg each) | 240 |
+| Three spacesuits (125 kg each) | 375 |
+| Food, water, oxygen and rock samples | 200 |
+| **Total** | **5,915** |
+
+On Mars it weighs what 2,249 kg would on Earth. The mass matters most at speed, where the six 10 kW motors run out of power: 0 to 45 km/h takes about 11 seconds.
+
 ## Limits to know about
 
 - Slopes come from 1 m elevation data. Rocks and ledges smaller than a few metres, and soft sand, are not seen.
@@ -117,6 +157,7 @@ At Curiosity's 263 stops inside the study area, the terrain grid differs from th
 - Conditions are a replay of measured sols, not a forecast. Weather is daily minimum and maximum only.
 - Background radiation is one reading every second sol, smoothed over 40 sols. The storm drill uses one recorded event and counts dose outdoors only; shielding inside the shelter is not modelled.
 - The storm warning time is an assumption the crew sets.
+- In the drive mode, the rover's mass, power and grip are estimates, and the ground is treated as firm everywhere (no soft sand, no rocks smaller than the 4 m grid). Driving needs a keyboard (or the on-screen pads on a touch screen) and a graphics card that handles WebGL.
 
 ## Rebuilding the data
 
@@ -134,9 +175,12 @@ The elevation file is 3.9 GB, so `build_terrain.py` downloads only the rows that
 
 ## Tests
 
+The drive-mode physics tests run each case twice, on Mars and with Earth gravity, so the effect of gravity is checked rather than assumed. `npm test` needs Node.js 23.6 or newer, which runs TypeScript directly.
+
 ```powershell
-backend\.venv\Scripts\python -m unittest discover -s backend/tests -v   # planner, mission logic and terrain tiles, 24 tests
+backend\.venv\Scripts\python -m unittest discover -s backend/tests -v   # planner, mission logic, terrain, rover, 27 tests
 cd frontend; npm run typecheck                                          # TypeScript
+cd frontend; npm test                                                   # drive-mode physics, Mars against Earth, 7 tests
 ```
 
 ## Repository layout
@@ -144,18 +188,21 @@ cd frontend; npm run typecheck                                          # TypeSc
 ```
 backend/
   app/         API (main.py), route search (planner.py), mission logic (mission.py),
-               conditions, photos, terrain, terrain tiles for the 3D map (relief.py), site description
+               conditions, photos, terrain, elevation for the 3D map and the drive mode (relief.py),
+               site description and the base rover (site.py)
   pipeline/    scripts that build backend/data from NASA sources
   data/        prepared data: terrain grid, weather, radiation, rover stops, photo lists
   tests/
 frontend/
-  src/         main.ts (wiring), map.ts, panels.ts, charts.ts, api.ts, types.ts, permalink.ts
+  src/         main.ts (wiring), map.ts, panels.ts, charts.ts, api.ts, types.ts, permalink.ts,
+               drive.ts (the drive mode: 3D rover, camera, dashboard), rover-physics.ts
+  tests/       drive-mode physics tests
 docs/          screenshot
 ```
 
 ## Credits
 
-Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, MSSS, CAB, SwRI and the PDS. Map library: MapLibre GL JS.
+Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, MSSS, CAB, SwRI and the PDS. Map library: MapLibre GL JS. 3D rover: three.js.
 
 ##Team:
 

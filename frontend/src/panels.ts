@@ -655,6 +655,7 @@ export function buildAbout(site: Site): void {
       h("li", {}, "Open \"Walk settings\" to change when the crew leaves, how fast they walk and how long their suits last."),
       h("li", {}, "Open \"Day on Mars\" to pick a day. The planner loads the temperature, daylight and radiation Curiosity measured then."),
       h("li", {}, "Open \"Solar storm test\" to see if the crew could reach shelter from anywhere on the route."),
+      h("li", {}, "Press \"Drive the rover\" to take the crew's base rover for a drive in 3D with W, A, S and D, and park it where base camp should be. It uses real Mars gravity, so the rover grips at 38 % of what it would on Earth: it slides in corners, takes long to stop and leaves the ground over crests."),
     ),
     h("p", {}, `Science goal: ${site.science_goal}`),
     h("h3", {}, "NASA data in this tool"),

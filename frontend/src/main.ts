@@ -19,6 +19,7 @@ import {
   StormPanel,
 } from "./panels";
 import { loadState, parseRouteFile, saveState, serializeRouteFile, type PlanState } from "./permalink";
+import { TerrainGrid } from "./rover-physics";
 import type { Params, Plan, Site, StopInput } from "./types";
 import "./style.css";
 
@@ -122,7 +123,41 @@ async function start(): Promise<void> {
       stopsChanged();
     },
     onPhotos: showPhotos,
+    onDrive: () => void startDrive(),
   });
+
+  // ---- drive mode: take the base rover for a drive and park it where base camp should be --------------------
+  let grid: Promise<TerrainGrid> | null = null;
+  let driving = false;
+  const loadGrid = () => {
+    grid ??= api.binary(site.elevation_grid.url).then((buffer) => TerrainGrid.decode(site.elevation_grid, buffer));
+    grid.catch(() => (grid = null)); // try again next time
+    return grid;
+  };
+  async function startDrive(): Promise<void> {
+    if (driving) return;
+    driving = true;
+    const panelWasHidden = app.classList.contains("panel-hidden");
+    app.classList.add("is-driving");
+    setPanelHidden(true);
+    try {
+      // Face the first stop, if there is one, so the crew sees where they are going.
+      const toward = stops[0];
+      const heading = toward ? Math.atan2((toward.lon - camp.lon) * Math.cos((camp.lat * Math.PI) / 180), toward.lat - camp.lat) : 0;
+      const parked = await map.drive({ grid: await loadGrid(), vehicle: site.vehicle, start: { ...camp }, heading, maxParkSlopeDeg: params.max_slope });
+      if (parked) {
+        camp.lat = parked.lat;
+        camp.lon = parked.lon;
+        schedulePlan();
+      }
+    } catch (error) {
+      showVerdict("no-go", `The drive mode could not start: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      driving = false;
+      app.classList.remove("is-driving");
+      setPanelHidden(panelWasHidden);
+    }
+  }
 
   const planPanel = new PlanPanel({
     onWork: (index, minutes) => {
@@ -156,6 +191,7 @@ async function start(): Promise<void> {
   };
   const dayChip = addChip("calendar", "Day on Mars", () => openFromChip(daySection));
   addChip("bolt", "Solar storm test", () => openFromChip(stormSection));
+  addChip("car", "Drive the rover", () => void startDrive());
 
   buildWalkSettings(walkSection, site, params, schedulePlan);
   const conditions = new ConditionsPanel(daySection, dayChip, site, sol, (value) => {
