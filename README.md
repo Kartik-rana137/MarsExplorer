@@ -4,9 +4,9 @@ NASA Space Apps Hackathon entry: **Mars EVA Planner**, a planning screen a Mars 
 
 The crew picks a base camp and science stops on the map. The planner finds a walking route that avoids steep ground, checks it against life support and daylight, and draws the **turn-back line**: the farthest the crew can go, do the planned work, and still walk back in time. Everything is computed from data NASA's Curiosity rover and orbiters collected at this exact place.
 
-![The planner showing a two-stop walk from base camp, the turn-back line, the storm limit and the map key](docs/screenshot.png)
+![The planner: a full-screen map of Mount Sharp with a floating panel showing the verdict, the walk's total time and the list of stops](docs/screenshot.png)
 
-The screen is written for people with no space background. It reads as three numbered steps (pick a day, set up the walk, choose where to go), uses everyday words, and keeps charts and fine settings folded away until asked for.
+The screen is written for people with no space background and laid out like a consumer maps app: a full-screen map with one floating panel. The panel shows only what is needed to decide (the verdict, the total time and distance, and the list of stops, like a directions list). Everything else opens on request: walk settings, the day's weather, the solar storm test, charts along the route, map layers and photos of a place.
 
 ## What a crew can do with it
 

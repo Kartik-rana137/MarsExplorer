@@ -1,15 +1,29 @@
 // App wiring: holds the editable plan (base camp, stops, settings, sol), asks the backend to plan it,
-// and hands the result to the map and panels.
+// and hands the result to the map and the floating panel.
 import { api, ApiError } from "./api";
-import { byId } from "./dom";
+import { byId, icon } from "./dom";
 import { clockAfter } from "./format";
 import { MissionMap } from "./map";
-import { buildAbout, buildCrewPanel, buildMapKey, ConditionsPanel, PhotosPanel, PlanPanel, ProfilePanel, showVerdict, StormPanel } from "./panels";
+import {
+  addChip,
+  addSection,
+  buildAbout,
+  buildLayers,
+  buildWalkSettings,
+  ConditionsPanel,
+  openSection,
+  PhotosPanel,
+  PlanPanel,
+  RoutePanel,
+  showVerdict,
+  StormPanel,
+} from "./panels";
 import { loadState, saveState } from "./permalink";
 import type { Params, Plan, Site, StopInput } from "./types";
 import "./style.css";
 
 const PLAN_DELAY_MS = 180;
+const PHONE_WIDTH = 760; // below this the panel is a sheet under the map instead of floating over it
 
 async function start(): Promise<void> {
   let site: Site;
@@ -28,15 +42,32 @@ async function start(): Promise<void> {
   let sol = saved.sol;
   let plan: Plan | null = null;
   let drillIndex: number | null = null;
-  // The storm test always has an answer in its panel, but its crew marker and way-back line are only
+  // The storm test always has an answer in its section, but its crew marker and way-back line are only
   // drawn on the map once someone uses the test, so the plain route stays easy to read.
   let drillOnMap = false;
+
+  // ---- panel: hide and show --------------------------------------------------------------------------
+  const app = byId("app");
+  const panel = byId("panel");
+  const toggle = byId("panel-toggle");
+  toggle.append(icon("chevronLeft", 20));
+  toggle.addEventListener("click", () => {
+    const hidden = app.classList.toggle("panel-hidden");
+    toggle.setAttribute("aria-expanded", String(!hidden));
+    toggle.title = hidden ? "Show the panel" : "Hide the panel";
+    toggle.setAttribute("aria-label", toggle.title);
+  });
+  /** Part of the map covered by the panel (left) and the chips (top). */
+  const insets = () => {
+    const floating = window.innerWidth > PHONE_WIDTH && !app.classList.contains("panel-hidden");
+    return { left: floating ? panel.getBoundingClientRect().right : 0, top: 52 };
+  };
 
   // ---- views -----------------------------------------------------------------------------------------
   const photos = new PhotosPanel();
   const showPhotos = async (lat: number, lon: number, where: string) => {
+    app.classList.remove("panel-hidden");
     photos.loading(where);
-    byId("photos").scrollIntoView({ behavior: "smooth", block: "nearest" });
     try {
       photos.show(where, await api.photos(lat, lon));
     } catch (error) {
@@ -45,6 +76,7 @@ async function start(): Promise<void> {
   };
 
   const map = new MissionMap(byId("map"), site, {
+    insets,
     onAddStop: (lat, lon, name) => {
       stops.push({ name: name ?? "", lat, lon, work_min: site.default_work_min });
       stopsChanged();
@@ -66,15 +98,6 @@ async function start(): Promise<void> {
     onPhotos: showPhotos,
   });
 
-  const conditions = new ConditionsPanel(site, sol, (value) => {
-    sol = value;
-    schedulePlan();
-  });
-  buildCrewPanel(site, params, schedulePlan);
-  const setStormKey = buildMapKey(site, map);
-  setStormKey(params.storm_warning_min);
-  buildAbout(site);
-
   const planPanel = new PlanPanel({
     onWork: (index, minutes) => {
       stops[index] = { ...stops[index], work_min: Math.min(300, Math.max(0, minutes || 0)) };
@@ -93,16 +116,39 @@ async function start(): Promise<void> {
     onPhotos: (index) => showPhotos(stops[index].lat, stops[index].lon, stops[index].name || `stop ${index + 1}`),
   });
 
-  const profilePanel = new ProfilePanel(
+  // Details that open on request, in the order a newcomer is likely to want them.
+  const walkSection = addSection("walk", "Walk settings");
+  const daySection = addSection("calendar", "Day on Mars");
+  const stormSection = addSection("bolt", "Solar storm test");
+  const routeSection = addSection("chart", "Route details");
+
+  // Chips over the map are shortcuts into those sections.
+  const openFromChip = (section: typeof daySection) => {
+    app.classList.remove("panel-hidden");
+    openSection(section);
+  };
+  const dayChip = addChip("calendar", "Day on Mars", () => openFromChip(daySection));
+  addChip("bolt", "Solar storm test", () => openFromChip(stormSection));
+
+  buildWalkSettings(walkSection, site, params, schedulePlan);
+  const conditions = new ConditionsPanel(daySection, dayChip, site, sol, (value) => {
+    sol = value;
+    schedulePlan();
+  });
+  const stormPanel = new StormPanel(stormSection, site, (index) => setDrill(index, true));
+  const routePanel = new RoutePanel(
+    routeSection,
     (index) => {
-      // Hovering the charts moves the crew marker; leaving puts it back on the storm-test position, if shown.
+      // Moving over the charts moves the crew marker; leaving puts it back on the storm-test position, if shown.
       const shown = index ?? (drillOnMap ? drillIndex : null);
       const profile = plan?.route?.profile;
       map.setCursor(profile && shown !== null && shown < profile.lat.length ? { lat: profile.lat[shown], lon: profile.lon[shown] } : null);
     },
     (index) => setDrill(index, true),
   );
-  const stormPanel = new StormPanel(site, (index) => setDrill(index, true));
+  const setStormKey = buildLayers(site, map);
+  setStormKey(params.storm_warning_min);
+  buildAbout(site);
 
   api.history().then((history) => conditions.setHistory(history)).catch(() => undefined);
   new ResizeObserver(() => map.invalidate()).observe(byId("map"));
@@ -142,10 +188,10 @@ async function start(): Promise<void> {
     map.showPlan(plan);
     setStormKey(plan.envelope.storm_line.minutes);
     planPanel.update(plan, stops);
-    profilePanel.update(plan, params.start_clock_min);
+    routePanel.update(plan, params.start_clock_min);
     stormPanel.update(plan);
 
-    // Storm drill starts at the point farthest from shelter.
+    // The storm test starts at the point farthest from shelter.
     const profile = plan.route?.profile;
     if (profile) {
       let farthest = 0;
@@ -155,7 +201,7 @@ async function start(): Promise<void> {
       setDrill(farthest);
     } else {
       drillIndex = null;
-      profilePanel.pin(null);
+      routePanel.pin(null);
       map.setCursor(null);
       map.showEscape(null);
       stormPanel.showEscape(null);
@@ -169,7 +215,7 @@ async function start(): Promise<void> {
     if (byUser) drillOnMap = true;
     drillIndex = Math.min(Math.max(0, index), profile.lat.length - 1);
     const position = { lat: profile.lat[drillIndex], lon: profile.lon[drillIndex] };
-    profilePanel.pin(drillIndex);
+    routePanel.pin(drillIndex);
     stormPanel.showPosition(drillIndex, clockAfter(params.start_clock_min, profile.elapsed_min[drillIndex]));
     map.setCursor(drillOnMap ? position : null);
     window.clearTimeout(escapeTimer);
@@ -192,7 +238,7 @@ async function start(): Promise<void> {
   await runPlan();
 }
 
-// Surface unexpected failures in the status bar instead of failing silently.
+// Surface unexpected failures in the verdict card instead of failing silently.
 window.addEventListener("error", (event) => showVerdict("no-go", `Unexpected error: ${event.message}`));
 window.addEventListener("unhandledrejection", (event) => showVerdict("no-go", `Unexpected error: ${String(event.reason)}`));
 

@@ -10,7 +10,8 @@ const MARS_RADIUS_M = 3_396_190;
 
 // Map symbol colours, chosen to stand out against orange-brown Mars imagery.
 export const MAP_COLOURS = {
-  route: "#ffffff",
+  route: "#1a73e8",       // blue with a white edge, as in a consumer maps app; the white edge keeps it readable on Mars
+  routeEdge: "#ffffff",
   casing: "#101010",
   storm: "#ff5fa2",
   turnBack: "#4dd9e8",
@@ -55,6 +56,8 @@ function pinScale(zoom: number): number {
 export type LayerName = "slope" | "reach" | "rings" | "storm" | "rover" | "labels";
 
 export interface MapHandlers {
+  /** Pixels of the map covered by floating interface on the left and top, so content is fitted beside it. */
+  insets: () => { left: number; top: number };
   onAddStop: (lat: number, lon: number, name?: string) => void;
   onMoveCamp: (lat: number, lon: number) => void;
   onMoveStop: (index: number, lat: number, lon: number) => void;
@@ -107,8 +110,9 @@ export class MissionMap {
       minZoom: 11,
       maxZoom: 20,
       zoomSnap: 0.25,
-      maxBounds: bounds.pad(0.6),
+      maxBounds: bounds.pad(0.9),
       attributionControl: true,
+      zoomControl: false, // added below, bottom right
     });
     this.map.attributionControl.setPrefix(false);
     for (const [name, z] of [["slope", 350], ["reach", 360], ["labels", 370]] as const) {
@@ -153,8 +157,10 @@ export class MissionMap {
     });
 
     this.map.on("click", (event: L.LeafletMouseEvent) => this.openPointMenu(event.latlng));
-    this.map.fitBounds(bounds, { padding: [10, 10] });
+    const inset = handlers.insets();
+    this.map.fitBounds(bounds, { paddingTopLeft: [inset.left + 12, inset.top + 12], paddingBottomRight: [56, 28] });
     this.addScaleBar(); // needs the view to be set first
+    L.control.zoom({ position: "bottomright" }).addTo(this.map);
     const scalePins = (zoom: number) => element.style.setProperty("--pin-scale", pinScale(zoom).toFixed(3));
     this.map.on("zoomanim", (event: L.ZoomAnimEvent) => scalePins(event.zoom));
     this.map.on("zoomend", () => scalePins(this.map.getZoom()));
@@ -171,14 +177,15 @@ export class MissionMap {
     this.key = element;
   }
 
-  /** Open a small menu at a point. The map pans if needed so the menu clears the zoom buttons and the key. */
+  /** Open a small menu at a point. The map pans if needed so the menu clears the panel, the chips and the key. */
   private openMenu(position: L.LatLngExpression, content: HTMLElement, liftPx: number): void {
     const keyOpen = this.key !== null && this.key.open && this.map.getSize().x > 700;
+    const inset = this.handlers.insets();
     L.popup({
       maxWidth: 260,
       offset: [0, -liftPx],
-      autoPanPaddingTopLeft: [52, 8],
-      autoPanPaddingBottomRight: [keyOpen ? this.key!.offsetWidth + 22 : 8, 8],
+      autoPanPaddingTopLeft: [inset.left + 8, inset.top + 8],
+      autoPanPaddingBottomRight: [keyOpen ? this.key!.offsetWidth + 22 : 56, 8],
     })
       .setLatLng(position)
       .setContent(content)
@@ -249,6 +256,7 @@ export class MissionMap {
     this.turnBackLine.clearLayers();
     if (envelope.turn_back_line.length) {
       cased(envelope.turn_back_line, MAP_COLOURS.turnBack, 3).addTo(this.turnBackLine);
+      this.labelLine(envelope.turn_back_line, "turn-back line", "turnback-line-label").addTo(this.turnBackLine);
     }
 
     // Walk-back time rings with a label on the longest piece of each.
@@ -268,9 +276,11 @@ export class MissionMap {
     this.routeLayer.clearLayers();
     const route = plan.route;
     if (route) {
-      cased(route.line, MAP_COLOURS.route, 3.5).addTo(this.routeLayer);
+      const round = { interactive: false, lineCap: "round", lineJoin: "round" } as const;
+      L.polyline(route.line, { ...round, color: MAP_COLOURS.routeEdge, weight: 8.5 }).addTo(this.routeLayer);
+      L.polyline(route.line, { ...round, color: MAP_COLOURS.route, weight: 5 }).addTo(this.routeLayer);
       if (route.storm.beyond_lines.length) {
-        L.polyline(route.storm.beyond_lines, { color: MAP_COLOURS.storm, weight: 3.5, interactive: false, lineCap: "round" }).addTo(this.routeLayer);
+        L.polyline(route.storm.beyond_lines, { ...round, color: MAP_COLOURS.storm, weight: 5 }).addTo(this.routeLayer);
       }
       if (route.turn_back) {
         L.marker([route.turn_back.lat, route.turn_back.lon], {
@@ -370,7 +380,7 @@ export class MissionMap {
   /** Leaflet's own scale bar assumes Earth; this one uses the radius of Mars. */
   private addScaleBar(): void {
     const bar = h("div", { class: "scale-bar" });
-    const control = new L.Control({ position: "bottomleft" });
+    const control = new L.Control({ position: "bottomright" });
     control.onAdd = () => bar;
     control.addTo(this.map);
     const update = () => {
