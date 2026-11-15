@@ -1,7 +1,7 @@
 // App wiring: holds the editable plan (base camp, stops, settings, sol), asks the backend to plan it,
 // and hands the result to the map and the floating panel.
 import { api, ApiError } from "./api";
-import { byId, icon } from "./dom";
+import { byId, h, icon } from "./dom";
 import { clockAfter } from "./format";
 import { MissionMap } from "./map";
 import {
@@ -18,12 +18,13 @@ import {
   showVerdict,
   StormPanel,
 } from "./panels";
-import { loadState, saveState } from "./permalink";
+import { loadState, parseRouteFile, saveState, serializeRouteFile, type PlanState } from "./permalink";
 import type { Params, Plan, Site, StopInput } from "./types";
 import "./style.css";
 
 const PLAN_DELAY_MS = 180;
 const PHONE_WIDTH = 760; // below this the panel is a sheet under the map instead of floating over it
+const MAX_ROUTE_FILE_BYTES = 1_000_000;
 
 function setupThemeToggle(): void {
   const button = byId<HTMLButtonElement>("theme-toggle");
@@ -146,6 +147,7 @@ async function start(): Promise<void> {
   const daySection = addSection("calendar", "Day on Mars");
   const stormSection = addSection("bolt", "Solar storm test");
   const routeSection = addSection("chart", "Route details");
+  const shareSection = addSection("share", "Share or load route");
 
   // Chips over the map are shortcuts into those sections.
   const openFromChip = (section: typeof daySection) => {
@@ -174,6 +176,72 @@ async function start(): Promise<void> {
   const setStormKey = buildLayers(site, map);
   setStormKey(params.storm_warning_min);
   buildAbout(site);
+
+  const routeStatus = h("p", { class: "route-share-status hint", role: "status", "aria-live": "polite" });
+  const routeFileInput = h("input", { type: "file", accept: ".json,application/json", hidden: true, "aria-label": "Load a route file" });
+  const currentState = (): PlanState => ({
+    camp: { ...camp },
+    stops: stops.map((stop) => ({ ...stop })),
+    params: { ...params },
+    sol,
+  });
+  const copyLink = h("button", {
+    type: "button",
+    class: "text-button",
+    onclick: async () => {
+      saveState(currentState());
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        routeStatus.textContent = "Share link copied to clipboard.";
+      } catch (error) {
+        const detail = error instanceof Error ? ` ${error.message}` : "";
+        routeStatus.textContent = `Could not copy the link. Copy the address bar URL instead.${detail}`;
+      }
+    },
+  }, "Copy link");
+  const saveRouteFile = h("button", {
+    type: "button",
+    class: "text-button",
+    onclick: () => {
+      try {
+        const blob = new Blob([serializeRouteFile(currentState())], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = h("a", { href: url, download: `mars-eva-route-sol-${sol}.json` });
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        routeStatus.textContent = "Route file saved.";
+      } catch (error) {
+        routeStatus.textContent = `Could not save the route file: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    },
+  }, "Save route file");
+  const loadRouteFile = h("button", {
+    type: "button",
+    class: "text-button",
+    onclick: () => routeFileInput.click(),
+  }, "Load route file");
+  routeFileInput.addEventListener("change", async () => {
+    const file = routeFileInput.files?.[0];
+    if (!file) return;
+    try {
+      if (file.size > MAX_ROUTE_FILE_BYTES) throw new Error("The selected file is larger than 1 MB.");
+      const state = parseRouteFile(await file.text(), site);
+      saveState(state);
+      window.location.reload();
+    } catch (error) {
+      routeStatus.textContent = `Could not load the route file: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      routeFileInput.value = "";
+    }
+  });
+  shareSection.body.append(
+    h("p", {}, "Copy a link or save a route file to share this plan. Loading a file replaces the current plan."),
+    h("div", { class: "route-actions" }, copyLink, saveRouteFile, loadRouteFile),
+    routeStatus,
+    routeFileInput,
+  );
 
   api.history().then((history) => conditions.setHistory(history)).catch(() => undefined);
   new ResizeObserver(() => {
