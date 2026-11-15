@@ -22,12 +22,14 @@ done
 adb logcat -d > "$OUT/logcat.txt" || true
 if [ -z "$started" ]; then
   echo "The planner did not start within 5 minutes. Python and app messages from the log:"
-  grep -E "python|MarsEVAPlanner|AndroidRuntime|chaquopy" "$OUT/logcat.txt" | tail -120 || true
+  grep -E "python|MarsEVAPlanner|AndroidRuntime|chaquopy" "$OUT/logcat.txt" | tail -120 > "$OUT/errors.txt" || true
+  cat "$OUT/errors.txt"
+  python3 "$(dirname "$0")/../.github/annotate.py" "Android app on the emulator" "$OUT/errors.txt"
   exit 1
 fi
 echo "health: $(cat "$OUT/health.json")"
 
-python3 - "$PORT" <<'EOF'
+python3 - "$PORT" 2> "$OUT/check-errors.txt" <<'EOF' || { cat "$OUT/check-errors.txt"; python3 "$(dirname "$0")/../.github/annotate.py" "Android app on the emulator" "$OUT/check-errors.txt"; exit 1; }
 import json, sys, urllib.request
 base = f"http://127.0.0.1:{sys.argv[1]}/"
 site = json.load(urllib.request.urlopen(base + "api/site", timeout=60))

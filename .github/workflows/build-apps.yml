@@ -111,8 +111,15 @@ jobs:
         with:
           gradle-version: "8.11.1"
       - name: Build the app
-        run: gradle assembleDebug --no-daemon --stacktrace
         working-directory: android
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle.log || {
+            # Job logs need a sign-in with admin rights to read; repeat the error as an annotation on the run page.
+            { sed -n '/What went wrong/,/Try:/p' gradle.log | head -60; grep -E "error:|ERROR:|FAILED" gradle.log | head -30; } > error.txt
+            python3 ../.github/annotate.py "Android build" error.txt
+            exit 1
+          }
       - run: |
           mkdir out
           cp android/app/build/outputs/apk/debug/app-debug.apk out/Mars-EVA-Planner-android.apk
