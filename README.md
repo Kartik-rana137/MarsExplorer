@@ -15,6 +15,7 @@ The map is 3D, in the manner of a globe viewer: NASA's imagery is draped over th
 - **Plan a route on foot.** Click the map to add science stops or move base camp. The route follows the fastest walkable ground between steep slopes, and shows distance, climb, walking time and arrival time at each stop.
 - **See how far is safe.** Ground beyond the turn-back line is dimmed. Each stop gets a "leave by" time. Rings showing how many minutes on foot each place is from shelter can be switched on in the map key.
 - **Get a clear verdict.** "Safe to go", "Tight" or "Not safe", with the reason in one sentence. If the plan runs too long, the map marks where and when to turn back.
+- **Choose a display theme.** Switch between light and dark mode from the panel header; the choice is remembered on this device.
 - **Run a solar storm drill.** Choose where the crew is when an alert arrives. The planner shows the fastest way back and whether they reach shelter within the warning time. The storm itself is the real one Curiosity recorded on 20 May 2024.
 - **Plan against real conditions.** Pick any Martian day (sol) since 2012 and the planner uses the temperature, daylight and radiation Curiosity measured then.
 - **Look before you go.** For any point, see the photos Curiosity took from the nearest place it stood, labelled by compass direction.
