@@ -153,4 +153,4 @@ docs/          screenshot
 Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, MSSS, CAB, SwRI and the PDS. Map library: Leaflet.
 Team:
 Kartik Rana (Lead dev)
-
+Aditya Kumar(visualization)
