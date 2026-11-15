@@ -1,0 +1,10 @@
+# Python packages inside the Android app (Python 3.10, installed by Chaquopy when the app is built).
+# scipy and contourpy are the newest versions Chaquopy has Android builds of for Python 3.10, and numpy the newest
+# that scipy 1.8 accepts. pydantic-core (pydantic 2) has no Android build, so the app uses pydantic 1, which is plain
+# Python, and the last FastAPI line that supports it. The backend works with both these and backend/requirements.txt.
+numpy==1.23.3
+scipy==1.8.1
+contourpy==1.0.5
+fastapi>=0.115,<0.116
+pydantic>=1.10,<2
+uvicorn

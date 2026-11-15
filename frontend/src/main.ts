@@ -240,9 +240,17 @@ async function start(): Promise<void> {
     class: "text-button",
     onclick: () => {
       try {
-        const blob = new Blob([serializeRouteFile(currentState())], { type: "application/json" });
+        const name = `mars-eva-route-sol-${sol}.json`;
+        const text = serializeRouteFile(currentState());
+        // The Android app saves files itself, because its web view cannot save page downloads (see android/).
+        const app = (window as { marsEvaApp?: { saveFile(name: string, text: string): string } }).marsEvaApp;
+        if (app) {
+          routeStatus.textContent = `Route file saved to ${app.saveFile(name, text)}.`;
+          return;
+        }
+        const blob = new Blob([text], { type: "application/json" });
         const url = URL.createObjectURL(blob);
-        const link = h("a", { href: url, download: `mars-eva-route-sol-${sol}.json` });
+        const link = h("a", { href: url, download: name });
         document.body.append(link);
         link.click();
         link.remove();

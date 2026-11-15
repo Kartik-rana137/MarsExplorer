@@ -54,6 +54,29 @@ Open http://localhost:5173. On macOS or Linux use `backend/.venv/bin/python` ins
 
 If port 8000 is already in use in your environment, the app is configured to use port 8001 instead. To serve everything from one port, run `npm run build` in `frontend` and open http://localhost:8001. The backend serves the built frontend when `frontend/dist` exists.
 
+## Apps for Windows, macOS and Android
+
+The planner also comes as an app that runs entirely on the device, with nothing to install first. Map imagery and photos still load from NASA's servers, so the device must be online.
+
+Download the apps from GitHub: open the **Actions** tab, choose **Build apps**, open the latest successful run and scroll to **Artifacts** (you need to be signed in to GitHub). When a version tag such as `v1.0.0` is pushed, the same files are also published under **Releases**.
+
+- **Windows 10 or 11:** run `MarsEVAPlanner.exe`. The app is not signed, so Windows may warn about an unknown publisher: choose *More info*, then *Run anyway*. It needs the Microsoft Edge WebView2 Runtime, which Windows normally includes.
+- **macOS on Apple silicon (M1 or later):** open `Mars-EVA-Planner-mac.dmg` and drag the app to Applications. The app is not signed by Apple, so the first time, try to open it, then go to *System Settings > Privacy & Security* and choose *Open Anyway*.
+- **Android 7.0 or newer:** copy `Mars-EVA-Planner-android.apk` to the phone and open it, allowing installs from that source when asked. The first start takes up to a minute while the app unpacks.
+
+Each app starts the planner's Python backend on the device at `127.0.0.1` and shows the page from it: in its own window on Windows and macOS (pywebview, packed by PyInstaller, in `desktop/`), and in a full-screen web view on Android (Python by Chaquopy, in `android/`). Android has no builds of the newest numpy, scipy and pydantic, so the Android app runs Python 3.10 with older versions of them (`android/app/requirements.txt`). The build checks that the backend's tests pass with both sets, and that each app starts and plans a walk; the Android app is checked on an emulator.
+
+To build the Windows or Mac app yourself, on that system, from the repository root:
+
+```powershell
+cd frontend; npm run build; cd ..
+python -m venv desktop\.venv
+desktop\.venv\Scripts\python -m pip install -r desktop\requirements.txt
+desktop\.venv\Scripts\pyinstaller desktop\mars-eva-planner.spec --noconfirm   # the app is then in dist\
+```
+
+The Android app needs JDK 17, the Android SDK, Gradle 8.11 and Python 3.10: build the frontend, then run `gradle assembleDebug` in `android/`.
+
 ## How it is built
 
 The project is two separate parts with a small HTTP API between them.
@@ -160,6 +183,7 @@ On Mars it weighs what 2,249 kg would on Earth. The mass matters most at speed, 
 - Background radiation is one reading every second sol, smoothed over 40 sols. The storm drill uses one recorded event and counts dose outdoors only; shielding inside the shelter is not modelled.
 - The storm warning time is an assumption the crew sets.
 - In the drive mode, the rover's mass, power and grip are estimates, and the ground is treated as firm everywhere (no soft sand, no rocks smaller than the 4 m grid). Driving needs a keyboard (or the on-screen pads on a touch screen) and a graphics card that handles WebGL.
+- In the apps, *Copy link* gives a link that works only on that device while the app is open; share a route file instead. The Android app is a test build, signed with a development key: fine for installing by hand, not for the Play Store. Some Android 15 and newer phones use 16 KB memory pages, which the app's numpy and scipy builds may not load on.
 
 ## Rebuilding the data
 
@@ -199,6 +223,9 @@ frontend/
   src/         main.ts (wiring), map.ts, panels.ts, charts.ts, api.ts, types.ts, permalink.ts,
                drive.ts (the drive mode: 3D rover, camera, dashboard), rover-physics.ts
   tests/       drive-mode physics tests
+desktop/       the Windows and Mac app: launcher.py (window), mars-eva-planner.spec (PyInstaller), icon
+android/       the Android app: MainActivity.java (web view), android_server.py, Gradle build, emulator check
+.github/       build-apps.yml: builds and checks all three apps
 docs/          screenshots of the planner and the drive mode
 ```
 
@@ -222,6 +249,7 @@ The Mars gravity and air density come from [NASA's Mars fact sheet](https://nssd
 
 - Frontend: [MapLibre GL JS](https://maplibre.org/) (BSD-3-Clause) for the map and [three.js](https://threejs.org/) (MIT) for the 3D rover, built with Vite (MIT) and TypeScript (Apache 2.0).
 - Backend: FastAPI (MIT), uvicorn, numpy, scipy, contourpy and imagecodecs (BSD-3-Clause).
+- Apps: [pywebview](https://pywebview.flowrl.com/) (BSD-3-Clause) for the desktop window, [PyInstaller](https://pyinstaller.org/) (GPL 2 with an exception that allows packing any program) for the Windows and Mac apps, and [Chaquopy](https://chaquo.com/chaquopy/) (MIT) for Python on Android. The apps include the libraries above, with their licence files.
 
 **Icons.** The interface icons are Google's [Material Design icons](https://github.com/google/material-design-icons), used under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). Their outlines are copied into [frontend/src/dom.ts](frontend/src/dom.ts).
 
