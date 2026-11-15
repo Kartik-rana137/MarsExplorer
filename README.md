@@ -206,7 +206,7 @@ docs/          screenshots of the planner and the drive mode
 
 Data and imagery: NASA, JPL-Caltech, USGS Astrogeology, University of Arizona, MSSS, CAB, SwRI and the PDS. Map library: MapLibre GL JS. 3D rover: three.js.
 
-##Team:
+## Team:
 
 Kartik Rana (Lead dev)
 
