@@ -214,8 +214,6 @@ docs/          screenshots of the planner and the drive mode
 | 1 m elevation model | USGS Astrogeology | Public domain (US government work) |
 | REMS weather, RAD radiation | CAB (Spain), SwRI | Mission data published by NASA |
 
-This is a non-commercial hackathon entry. Commercial use of the partners' images may need the owner's permission.
-
 The Mars gravity and air density come from [NASA's Mars fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html). The Space Exploration Vehicle's mass (about 3,000 kg) comes from [Wikipedia](https://en.wikipedia.org/wiki/Space_Exploration_Vehicle); only that figure is used.
 
 **Software.** All of these are open source and installed by npm or pip, not copied into this repository.
