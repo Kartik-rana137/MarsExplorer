@@ -115,6 +115,8 @@ At Curiosity's 263 stops inside the study area, the terrain grid differs from th
 
 Press **Drive the rover** (or click the base camp pin). The planner steps aside and the crew's rover appears in 3D on the real ground, with a chase camera behind it.
 
+![Drive mode: the base rover sliding sideways at 27 km/h with a dust trail behind it, the speedometer reading "Drifting", and panels showing the Mars gravity, the rover's mass and its grip](docs/drive-mode.png)
+
 | Key | Does |
 |---|---|
 | W / S | Accelerate / brake, then reverse |
@@ -197,7 +199,7 @@ frontend/
   src/         main.ts (wiring), map.ts, panels.ts, charts.ts, api.ts, types.ts, permalink.ts,
                drive.ts (the drive mode: 3D rover, camera, dashboard), rover-physics.ts
   tests/       drive-mode physics tests
-docs/          screenshot
+docs/          screenshots of the planner and the drive mode
 ```
 
 ## Credits
