@@ -332,6 +332,17 @@ button {
   background: var(--accent-wash);
 }
 
+.route-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.route-share-status {
+  min-height: 1.45em;
+  margin: 8px 0 0;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

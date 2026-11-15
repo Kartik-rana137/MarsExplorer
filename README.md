@@ -19,7 +19,7 @@ The map is 3D, in the manner of a globe viewer: NASA's imagery is draped over th
 - **Run a solar storm drill.** Choose where the crew is when an alert arrives. The planner shows the fastest way back and whether they reach shelter within the warning time. The storm itself is the real one Curiosity recorded on 20 May 2024.
 - **Plan against real conditions.** Pick any Martian day (sol) since 2012 and the planner uses the temperature, daylight and radiation Curiosity measured then.
 - **Look before you go.** For any point, see the photos Curiosity took from the nearest place it stood, labelled by compass direction.
-- **Share a plan.** The plan is stored in the page address, so a link reopens it exactly.
+- **Share a plan.** Copy a link or save a JSON route file. Load a route file to restore its camp, stops, walk settings and sol.
 
 ## How it answers the challenge
 
