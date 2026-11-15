@@ -1,6 +1,6 @@
-# Mars Explorer
+# Mars Explorer: A Mars EVA Planner
 
-NASA Space Apps Hackathon entry: **Mars EVA Planner**, a planning screen a Mars crew would use in the habitat before walking out to study the boxwork formations on Mount Sharp, Gale Crater.
+NASA Space Apps Hackathon entry: **Mars Explorer: A Mars EVA Planner**, a planning screen a Mars crew would use in the habitat before walking out to study the boxwork formations on Mount Sharp, Gale Crater.
 
 The crew picks a base camp and science stops on the map. The planner finds a walking route that avoids steep ground, checks it against life support and daylight, and draws the **turn-back line**: the farthest the crew can go, do the planned work, and still walk back in time. Everything is computed from data NASA's Curiosity rover and orbiters collected at this exact place.
 
