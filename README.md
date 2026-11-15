@@ -159,3 +159,5 @@ Kartik Rana (Lead dev)
 Aditya Kumar(visualization)
 
 Aakash Rath (Frontend)
+
+Daksh Mishra (visualisation)
