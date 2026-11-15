@@ -57,6 +57,7 @@ val bundlePlanner by tasks.registering(Sync::class) {
         into("web")
     }
 }
-tasks.named("preBuild") {
+// Chaquopy's tasks that read the Python sources (mergeDebugPythonSources, ...) must run after the copy.
+tasks.matching { it.name.endsWith("PythonSources") }.configureEach {
     dependsOn(bundlePlanner)
 }
