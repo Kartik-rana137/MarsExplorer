@@ -35,11 +35,11 @@ WORK = CACHE / "terrain"
 
 # Slope classes for the map overlay: upper bound in degrees and RGBA colour.
 SLOPE_CLASSES = [
-    (10, (0, 0, 0, 0)),          # easy ground: transparent, imagery shows through
-    (15, (246, 211, 77, 150)),   # moderate
-    (20, (240, 138, 52, 175)),   # steep
-    (25, (214, 60, 48, 195)),    # very steep
-    (90, (120, 22, 62, 215)),    # cliff
+    (15, (0, 0, 0, 0)),          # gentle ground: transparent, imagery shows through
+    (20, (246, 211, 77, 165)),   # 15-20 degrees: steep
+    (25, (240, 138, 52, 185)),   # 20-25 degrees
+    (30, (214, 60, 48, 200)),    # 25-30 degrees
+    (90, (120, 22, 62, 215)),    # over 30 degrees
 ]
 
 
@@ -281,5 +281,6 @@ if __name__ == "__main__":
         stage_decode()
     if stage in ("grid", "all"):
         stage_grid()
-    if stage in ("validate", "all") and (DATA / "rover.json").exists():
+    # The grid stage rewrites terrain.json, so the comparison with the rover is re-attached every time.
+    if (DATA / "rover.json").exists() and (DATA / "terrain.npz").exists():
         stage_validate()

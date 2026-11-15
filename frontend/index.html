@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mars EVA Planner - Mount Sharp boxwork</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23c1440e'/%3E%3Ccircle cx='11' cy='12' r='3' fill='%23a13508'/%3E%3Ccircle cx='20' cy='20' r='4' fill='%23a13508'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1>Mars EVA Planner</h1>
+            <p>Plan a safe walk on Mars</p>
+          </div>
+        </div>
+        <div id="verdict" class="verdict" role="status" aria-live="polite"></div>
+        <button id="about-button" class="ghost-button" type="button">How it works</button>
+      </header>
+
+      <aside class="panel panel-left" aria-label="Day and walk settings">
+        <section id="conditions"></section>
+        <section id="crew"></section>
+      </aside>
+
+      <main class="centre">
+        <div id="map" aria-label="Map of the walking area"></div>
+        <details id="profile" class="profile"></details>
+      </main>
+
+      <aside class="panel panel-right" aria-label="Your walk">
+        <section id="plan"></section>
+        <section id="storm"></section>
+        <section id="photos"></section>
+      </aside>
+    </div>
+    <dialog id="about" class="about"></dialog>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

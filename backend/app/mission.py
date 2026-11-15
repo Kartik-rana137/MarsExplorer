@@ -84,6 +84,15 @@ def _runs(flags: np.ndarray) -> list[tuple[int, int]]:
     return [(int(a), int(b) - 1) for a, b in zip(edges[::2], edges[1::2])]
 
 
+def _span(minutes: float) -> str:
+    """A length of time in everyday words: 46 -> "46 min", 286 -> "4 h 46 min"."""
+    total = int(round(abs(minutes)))
+    hours, rest = divmod(total, 60)
+    if hours == 0:
+        return f"{rest} min"
+    return f"{hours} h" if rest == 0 else f"{hours} h {rest} min"
+
+
 def build_plan(planner: Planner, conditions: Conditions, overlays: OverlayStore, camp, stops, params, sol) -> dict:
     terrain = planner.terrain
     speed = params.flat_speed
@@ -93,7 +102,7 @@ def build_plan(planner: Planner, conditions: Conditions, overlays: OverlayStore,
     limit_min = limit["limit_min"]
     problems: list[str] = []
     if limit_min <= 0:
-        problems.append("No time is available: the EVA starts too late in the day or the reserve uses up the life support.")
+        problems.append("No time for a walk: it starts too late in the day, or the safety reserve uses up the suit's supply.")
 
     try:
         camp_node, camp_moved = planner.snap(camp.lat, camp.lon, max_slope)
@@ -119,7 +128,7 @@ def build_plan(planner: Planner, conditions: Conditions, overlays: OverlayStore,
             problems.append(f"{label}: {error}.")
             continue
         if not (np.isfinite(out_effort[node]) and np.isfinite(back_effort[node])):
-            report["problem"] = "cannot be reached on foot from base camp within the slope limit"
+            report["problem"] = "can't be reached on foot: the ground around it is too steep"
             problems.append(f"{label} {report['problem']}.")
             continue
         report.update(ok=True, snapped_m=round(moved, 1), elev_m=round(float(flat_elev[node]), 1),
@@ -259,25 +268,27 @@ def build_plan(planner: Planner, conditions: Conditions, overlays: OverlayStore,
             },
         }
 
-    # ---- verdict -------------------------------------------------------------------------------------
+    # ---- verdict (plain words: this sentence is the first thing a non-expert reads) -------------------
+    deadline = "before dark" if limit["limited_by"] == "daylight" else "before the suit runs low"
     if problems:
         verdict, text = "no-go", problems[0]
     elif route is None:
-        verdict, text = "none", "Add a science stop to plan a route."
+        verdict, text = "none", "Click the map to add a place to visit."
     elif route["turn_back"]:
         tb = route["turn_back"]
         over = -route["totals"]["min_spare_min"]
-        where = f"while working at {tb['at_stop']}" if tb["at_stop"] else f"{tb['dist_m'] / 1000:.1f} km along the route"
+        where = f"while working at {tb['at_stop']}" if tb["at_stop"] else f"{tb['dist_m'] / 1000:.1f} km into the walk"
         verdict = "no-go"
-        text = (f"This plan runs {over:.0f} min past the {limit['limited_by']} limit. "
+        text = (f"This walk is {_span(over)} too long to be back {deadline}. "
                 f"Turn back by {tb['clock']} ({where}).")
     elif route["totals"]["min_spare_min"] < TIGHT_SPARE_MIN:
         verdict = "marginal"
-        text = f"Feasible but tight: only {route['totals']['min_spare_min']:.0f} min to spare against the {limit['limited_by']} limit."
+        text = (f"Possible, but only {_span(route['totals']['min_spare_min'])} to spare. "
+                f"Back at base camp by {route['totals']['finish_clock']}.")
     else:
         verdict = "go"
-        text = (f"Back at base camp by {route['totals']['finish_clock']} with "
-                f"{route['totals']['min_spare_min']:.0f} min to spare against the {limit['limited_by']} limit.")
+        text = (f"Back at base camp by {route['totals']['finish_clock']}, "
+                f"with {_span(route['totals']['min_spare_min'])} to spare {deadline}.")
 
     return {
         "verdict": verdict,

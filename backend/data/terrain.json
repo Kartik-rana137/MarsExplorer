@@ -15,10 +15,10 @@
   "source_url": "https://planetarymaps.usgs.gov/mosaic/Mars/MSL/MSL_Gale_DEM_Mosaic_1m_v3.tif",
   "slope_method": "steepest slope inside each 4 m cell, from the 1 m elevation data smoothed with a 3 m Gaussian",
   "slope_classes_deg": [
-    10,
     15,
     20,
     25,
+    30,
     90
   ],
   "slope_colours": [
