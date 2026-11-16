@@ -7,13 +7,14 @@ Interactive API docs are then at http://localhost:8001/docs
 from __future__ import annotations
 
 import json
+import math
 import os
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import site
@@ -23,6 +24,7 @@ from .photos import PhotoService
 from .planner import Planner
 from .relief import MAX_ZOOM as RELIEF_MAX_ZOOM, ReliefTiles, height_grid
 from .terrain import Terrain
+from .web import CachedFiles, CompressText
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 # The desktop and Android apps (desktop/, android/) bundle the data and the built frontend elsewhere and say where.
@@ -43,6 +45,7 @@ overlays = OverlayStore()
 app = FastAPI(title="Mars EVA planner API", version="1.1",
               description="Route planning and safe-return limits for a crew on foot in the Mount Sharp boxwork region.")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CompressText)  # JSON and the page's scripts are 4 to 5 times smaller compressed
 
 
 # ---- request models ----------------------------------------------------------------------------------
@@ -85,6 +88,13 @@ class EscapeRequest(BaseModel):
     params: Params = Field(default_factory=Params)
 
 
+def default_stops() -> list[dict]:
+    """The science stops a new plan starts with: Curiosity's drill sites named in site.DEFAULT_STOP_SITES."""
+    by_name = {s["name"]: s for s in rover["sites"]}
+    return [{"name": name, "lat": by_name[name]["lat"], "lon": by_name[name]["lon"], "work_min": site.DEFAULT_WORK_MIN}
+            for name in site.DEFAULT_STOP_SITES if name in by_name]
+
+
 # ---- endpoints ---------------------------------------------------------------------------------------
 
 @app.get("/api/health")
@@ -96,9 +106,6 @@ def health() -> dict:
 def get_site() -> dict:
     """Everything the map needs to start: layers, the study area, rover data, defaults and data sources."""
     sites = rover["sites"]
-    by_name = {s["name"]: s for s in sites}
-    default_stops = [{"name": name, "lat": by_name[name]["lat"], "lon": by_name[name]["lon"], "work_min": site.DEFAULT_WORK_MIN}
-                     for name in site.DEFAULT_STOP_SITES if name in by_name]
     return {
         **site.SITE,
         "bounds": terrain.bounds,
@@ -114,7 +121,7 @@ def get_site() -> dict:
                         "method": terrain.meta["slope_method"]},
         "validation": terrain.meta.get("validation"),
         "default_camp": site.DEFAULT_CAMP,
-        "default_stops": default_stops,
+        "default_stops": default_stops(),
         "default_work_min": site.DEFAULT_WORK_MIN,
         "parameters": {name: {"default": d, "min": lo, "max": hi, "step": step} for name, (d, lo, hi, step) in site.PARAMETERS.items()},
         "targets": sites,
@@ -198,6 +205,37 @@ def get_terrain_tile(z: int, x: int, y: int) -> Response:
     return Response(content=relief.tile(z, x, y), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
-app.mount("/overlays", StaticFiles(directory=DATA_DIR / "overlays"), name="overlays")
+app.mount("/overlays", CachedFiles(directory=DATA_DIR / "overlays"), name="overlays")
 if FRONTEND_DIST.exists():  # serve the built frontend when it is there (production-style, single port)
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+    app.mount("/", CachedFiles(directory=FRONTEND_DIST, html=True, page=True), name="frontend")
+
+
+# ---- warming up --------------------------------------------------------------------------------------
+
+def warm_up() -> None:
+    """Do the slowest work of the first visit in the background, as soon as the server starts.
+
+    The first plan from a base camp builds the step graphs and searches the whole area (most of a second); the 3D map
+    then asks for some 30 elevation tiles. Planning the default walk and drawing the study area's tiles now means the
+    first visitor gets both from memory. A request that arrives meanwhile waits only for what is still left to do.
+    """
+    try:
+        request = PlanRequest(camp=Point(lat=site.DEFAULT_CAMP["lat"], lon=site.DEFAULT_CAMP["lon"]),
+                              stops=[Stop(**stop) for stop in default_stops()])
+        with planner.lock:
+            build_plan(planner, conditions, overlays, request.camp, request.stops, request.params, None)
+        (south, west), (north, east) = terrain.bounds
+        for z in range(10, RELIEF_MAX_ZOOM + 1):
+            n = 2 ** z
+            x0, x1 = (int((lon + 180.0) / 360.0 * n) for lon in (west, east))
+            y0, y1 = (int((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n) for lat in (north, south))
+            for x in range(x0 - 1, x1 + 2):
+                for y in range(y0 - 1, y1 + 2):
+                    if relief.valid(z, x, y):
+                        relief.tile(z, x, y)
+    except Exception as error:  # only a missed head start: the same work is done on request instead
+        print(f"warm-up skipped: {error}")
+
+
+if os.environ.get("MARS_EVA_WARM_UP", "1") != "0":
+    threading.Thread(target=warm_up, name="warm-up", daemon=True).start()

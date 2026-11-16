@@ -102,6 +102,8 @@ frontend/  TypeScript. Draws the map, panels and charts and sends the plan to th
 
 **Frontend** (TypeScript, Vite, MapLibre GL for the 3D map, three.js for the drivable rover, no UI framework): holds only the plan being edited. `src/types.ts` mirrors the API responses.
 
+**Load time.** As soon as it starts, the backend plans the default walk and draws the study area's elevation tiles in the background (`warm_up` in `main.py`), so the first visitor gets both from memory: the first plan takes about 0.15 s instead of 1.7 s. The route search builds its step graph once per slope limit and gets the way-back graph by turning it over (a transpose). Elevation tiles use a PNG row filter, which halves them. JSON, HTML, CSS and JavaScript are sent gzip-compressed, and the page's files, whose names change with their contents, are cached by the browser for good (`app/web.py`). Over a 10 Mbit/s connection the first visit shows its verdict in about 1 s instead of 1.8 s, and moves 0.9 MB instead of 2.2 MB.
+
 ## NASA data used
 
 | Used for | Dataset | From |

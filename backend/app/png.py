@@ -29,12 +29,19 @@ def png_palette(indices: np.ndarray, palette_rgba: list[tuple[int, int, int, int
 
 
 def png_rgb(pixels: np.ndarray, level: int = 6) -> bytes:
-    """Encode a (height, width, 3) uint8 array as a truecolour PNG."""
+    """Encode a (height, width, 3) uint8 array as a truecolour PNG.
+
+    Every scanline after the first is stored as its difference from the line above (PNG filter "up"). For smooth
+    images such as elevation tiles, the differences are small and repetitive, so the file is about half the size
+    and quicker to compress.
+    """
     pixels = np.ascontiguousarray(pixels, dtype=np.uint8)
     height, width, _ = pixels.shape
+    flat = pixels.reshape(height, width * 3)
     rows = np.empty((height, width * 3 + 1), dtype=np.uint8)
-    rows[:, 0] = 0  # filter type "none" on every scanline
-    rows[:, 1:] = pixels.reshape(height, width * 3)
+    rows[:, 0] = 2  # filter type "up" on every scanline (on the first, the line above counts as zeros)
+    rows[0, 1:] = flat[0]
+    np.subtract(flat[1:], flat[:-1], out=rows[1:, 1:])  # wraps around modulo 256, as the PNG filter does
     return (
         b"\x89PNG\r\n\x1a\n"
         + _chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))

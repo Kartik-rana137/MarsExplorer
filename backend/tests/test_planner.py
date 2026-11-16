@@ -21,6 +21,7 @@ from app.conditions import CLOCK_STRETCH, Conditions  # noqa: E402
 from app.forecast import MARS_YEAR_SOLS, Forecast, backtest  # noqa: E402
 from app.mission import OverlayStore, PlanError, build_escape, build_plan, time_limit  # noqa: E402
 from app.planner import Planner, relative_speed, simplify, trace  # noqa: E402
+from app.png import png_rgb  # noqa: E402
 from app.relief import MAX_ZOOM, TILE_PX, ReliefTiles, height_grid  # noqa: E402
 from app.site import ROVER  # noqa: E402
 from app.terrain import Terrain  # noqa: E402
@@ -162,14 +163,35 @@ class RoverSpec(unittest.TestCase):
         self.assertLess(grip, 0.4 * ROVER["traction_coefficient"] * 9.81)  # under 40 % of the same tyres on Earth
 
 
-def decode_terrain_png(data: bytes) -> np.ndarray:
-    """Heights in metres from a terrain-RGB PNG written by app.png.png_rgb (one IDAT chunk, no row filters)."""
+def decode_png_rgb(data: bytes) -> np.ndarray:
+    """Pixels of a truecolour PNG written by app.png.png_rgb (one IDAT chunk), undoing the row filters as a PNG
+    reader would (none, sub and up are supported)."""
     import struct
     import zlib
+    width, height = struct.unpack(">II", data[16:24])
     start = data.index(b"IDAT")
     length = struct.unpack(">I", data[start - 4:start])[0]
-    raw = np.frombuffer(zlib.decompress(data[start + 4:start + 4 + length]), dtype=np.uint8).reshape(TILE_PX, TILE_PX * 3 + 1)
-    rgb = raw[:, 1:].reshape(TILE_PX, TILE_PX, 3).astype(np.int64)
+    raw = np.frombuffer(zlib.decompress(data[start + 4:start + 4 + length]), dtype=np.uint8).reshape(height, width * 3 + 1)
+    out = np.zeros((height, width * 3), dtype=np.uint8)
+    for y in range(height):
+        kind, line = raw[y, 0], raw[y, 1:]
+        if kind == 0:
+            out[y] = line
+        elif kind == 1:  # sub: add the byte one pixel to the left
+            row = line.astype(np.int64)
+            for x in range(3, width * 3):
+                row[x] = (row[x] + row[x - 3]) % 256
+            out[y] = row
+        elif kind == 2:  # up: add the byte above
+            out[y] = line + (out[y - 1] if y else 0)
+        else:
+            raise AssertionError(f"row filter {kind} not expected")
+    return out.reshape(height, width, 3)
+
+
+def decode_terrain_png(data: bytes) -> np.ndarray:
+    """Heights in metres from a terrain-RGB PNG written by app.png.png_rgb."""
+    rgb = decode_png_rgb(data).astype(np.int64)
     return -10000.0 + (rgb[..., 0] * 65536 + rgb[..., 1] * 256 + rgb[..., 2]) * 0.1
 
 
@@ -218,6 +240,33 @@ class ReliefOnARamp(unittest.TestCase):
         self.assertTrue(ReliefTiles.valid(MAX_ZOOM, 0, 0))
         self.assertFalse(ReliefTiles.valid(MAX_ZOOM + 1, 0, 0))
         self.assertFalse(ReliefTiles.valid(3, 8, 0))
+
+    def test_png_pixels_round_trip_exactly(self):
+        rng = np.random.default_rng(7)
+        smooth = np.dstack([np.add.outer(np.arange(40), np.arange(50)) % 256] * 3).astype(np.uint8)
+        noisy = rng.integers(0, 256, (40, 50, 3), dtype=np.uint8)  # differences wrap around 256
+        for pixels in (smooth, noisy):
+            self.assertTrue(np.array_equal(decode_png_rgb(png_rgb(pixels)), pixels))
+
+
+class SearchDirections(unittest.TestCase):
+    def test_the_way_back_matches_a_search_from_every_cell(self):
+        # Rough made-up ground with no-go cells. The reversed search (from base camp, over the transposed graph) must
+        # give the same effort to walk back from any cell as a forward search started at that cell.
+        rng = np.random.default_rng(3)
+        elev = np.cumsum(rng.normal(0.0, 0.8, (14, 16)), axis=1) + np.cumsum(rng.normal(0.0, 0.8, (14, 16)), axis=0)
+        slope = rng.uniform(0.0, 26.0, (14, 16))
+        slope[7, 8] = 0.0  # base camp stands on walkable ground
+        planner = Planner(make_terrain(elev, slope))
+        camp = 7 * 16 + 8
+        back, _ = planner.field(20.0, camp, reverse=True)
+        self.assertGreater(int(np.isfinite(back).sum()), 50)  # most of the ground is reachable, so the check means something
+        for start in range(14 * 16):
+            there, _ = planner.field(20.0, start, reverse=False)
+            if np.isinf(back[start]):
+                self.assertTrue(np.isinf(there[camp]))
+            else:
+                self.assertAlmostEqual(float(back[start]), float(there[camp]), delta=1e-3 * max(1.0, float(there[camp])))
 
 
 @unittest.skipUnless((DATA / "terrain.npz").exists() and (DATA / "weather.json").exists(), "study-area data not built")

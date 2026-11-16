@@ -114,35 +114,42 @@ class Planner:
         if key in self._graphs:
             self._graphs.move_to_end(key)
             return self._graphs[key]
-        terrain = self.terrain
-        rows, cols = terrain.rows, terrain.cols
-        elev = terrain.elev.astype(np.float64)
-        passable = self.passable(max_slope)
-        weights = np.full((rows, cols, 8), np.inf)
-        for k, (dr, dc) in enumerate(NEIGHBOURS):
-            r0, r1 = max(0, -dr), rows - max(0, dr)
-            c0, c1 = max(0, -dc), cols - max(0, dc)
-            run = math.hypot(dr * terrain.dy, dc * terrain.dx)
-            rise = elev[r0 + dr:r1 + dr, c0 + dc:c1 + dc] - elev[r0:r1, c0:c1]
-            if reverse:  # the edge a->b of the reversed graph stands for walking b->a
-                rise = -rise
-            allowed = passable[r0:r1, c0:c1] & passable[r0 + dr:r1 + dr, c0 + dc:c1 + dc]
-            if dr and dc:  # do not cut diagonally past a no-go corner
-                allowed &= passable[r0 + dr:r1 + dr, c0:c1] & passable[r0:r1, c0 + dc:c1 + dc]
-            with np.errstate(invalid="ignore"):
-                effort = run / relative_speed(rise / run)
-            weights[r0:r1, c0:c1, k] = np.where(allowed, effort, np.inf)
-        count = rows * cols
-        weights = weights.reshape(count, 8)
-        mask = np.isfinite(weights)
-        steps = np.array([dr * cols + dc for dr, dc in NEIGHBOURS], dtype=np.int32)
-        targets = (np.arange(count, dtype=np.int32)[:, None] + steps[None, :])[mask]
-        pointers = np.concatenate(([0], np.cumsum(mask.sum(axis=1)))).astype(np.int32)
-        graph = csr_matrix((weights[mask], targets, pointers), shape=(count, count))
+        if reverse:
+            # The edge a->b of the reversed graph stands for walking b->a, which is the forward graph's edge b->a:
+            # so the reversed graph is the forward graph turned over (a transpose, about a tenth of the work).
+            graph = self._graph(max_slope, False).T.tocsr()
+        else:
+            graph = self._forward_graph(max_slope)
         self._graphs[key] = graph
         while len(self._graphs) > 2:  # keep only one slope limit's pair of graphs in memory
             self._graphs.popitem(last=False)
         return graph
+
+    def _forward_graph(self, max_slope: float) -> csr_matrix:
+        """Every walkable cell joined to its walkable neighbours; a step's weight is its effort."""
+        terrain = self.terrain
+        rows, cols = terrain.rows, terrain.cols
+        # The weights are worked out in 32-bit numbers (about twice as fast; they differ from 64-bit by one part in
+        # ten million) and stored in 64-bit, which is what the search wants.
+        elev = terrain.elev.astype(np.float32)
+        passable = self.passable(max_slope)
+        weights = np.full((8, rows, cols), np.inf)
+        for k, (dr, dc) in enumerate(NEIGHBOURS):
+            r0, r1 = max(0, -dr), rows - max(0, dr)
+            c0, c1 = max(0, -dc), cols - max(0, dc)
+            run = np.float32(math.hypot(dr * terrain.dy, dc * terrain.dx))
+            allowed = passable[r0:r1, c0:c1] & passable[r0 + dr:r1 + dr, c0 + dc:c1 + dc]
+            if dr and dc:  # do not cut diagonally past a no-go corner
+                allowed &= passable[r0 + dr:r1 + dr, c0:c1] & passable[r0:r1, c0 + dc:c1 + dc]
+            rise = elev[r0 + dr:r1 + dr, c0 + dc:c1 + dc][allowed] - elev[r0:r1, c0:c1][allowed]  # only where it is used
+            weights[k, r0:r1, c0:c1][allowed] = run / relative_speed(rise / run)
+        count = rows * cols
+        by_cell = weights.reshape(8, count).T  # (cell, neighbour), without copying
+        mask = np.isfinite(by_cell)
+        steps = np.array([dr * cols + dc for dr, dc in NEIGHBOURS], dtype=np.int32)
+        targets = (np.arange(count, dtype=np.int32)[:, None] + steps[None, :])[mask]
+        pointers = np.concatenate(([0], np.cumsum(mask.sum(axis=1)))).astype(np.int32)
+        return csr_matrix((by_cell[mask], targets, pointers), shape=(count, count))
 
     def field(self, max_slope: float, node: int, reverse: bool = False) -> tuple[np.ndarray, np.ndarray]:
         """Effort between `node` and every cell, plus the search tree.
