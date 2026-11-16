@@ -55,6 +55,8 @@ def time_limit(params, cond: dict) -> dict:
     notes = []
     if params.start_clock_min < cond["sunrise_min"]:
         notes.append(f"The EVA starts before sunrise ({cond['sunrise']}).")
+    if cond.get("estimated"):
+        notes.append("Sunset for this future day is an estimate from past Mars years (usually right to within a minute).")
     return {
         "usable_life_support_min": round(usable, 1),
         "daylight_min": round(daylight, 1),

@@ -120,7 +120,10 @@ def get_site() -> dict:
         "targets": sites,
         "rover": {"path": rover["path"], "latest": rover["latest"], "fetched": rover["fetched"],
                   "stops": [{"sol": s["sol"], "lat": s["lat"], "lon": s["lon"]} for s in rover["stops"]]},
-        "sols": {"first": conditions.first_sol, "latest": conditions.latest_sol},
+        # Sols after `latest` are estimates, up to `forecast_until`; `today` is the sol it is now on Mars.
+        "sols": {"first": conditions.first_sol, "latest": conditions.latest_sol,
+                 "forecast_until": conditions.forecast_until, "today": conditions.forecast.today_sol()},
+        "forecast": {"check": conditions.forecast_check},
         "storm": conditions.storm_summary(),
         "sources": site.SOURCES,
         "model_notes": site.MODEL_NOTES,
@@ -128,9 +131,13 @@ def get_site() -> dict:
 
 
 @app.get("/api/conditions")
-def get_conditions(sol: int | None = Query(None, description="Mission sol; latest if omitted")) -> dict:
-    """Weather and background radiation Curiosity measured on (or nearest to) a sol."""
-    return conditions.for_sol(sol)
+def get_conditions(sol: int | None = Query(None, description="Mission sol; latest measured if omitted")) -> dict:
+    """Weather and background radiation Curiosity measured on (or nearest to) a sol, or for a sol after the record,
+    an estimate (`"estimated": true`) with likely ranges."""
+    try:
+        return conditions.for_sol(sol)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.get("/api/conditions/history")

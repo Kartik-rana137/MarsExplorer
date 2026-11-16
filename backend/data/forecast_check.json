@@ -1,0 +1,21 @@
+{
+  "tested_sols": [
+    4327,
+    4995
+  ],
+  "typical_error": {
+    "sunrise_min": 0.1,
+    "sunset_min": 0.1,
+    "air_min_c": 2.3,
+    "air_max_c": 3.0,
+    "pressure_pa": 8.1,
+    "radiation_ugy_h": 0.6
+  },
+  "share_inside_range": {
+    "air_min_c": 0.87,
+    "air_max_c": 0.87,
+    "pressure_pa": 0.98,
+    "radiation_ugy_h": 1.0
+  },
+  "note": "Each estimate method was run as if Curiosity's record ended one Mars year earlier, and its estimates for that last year were compared with what Curiosity measured. typical_error is the mean difference; share_inside_range is how often the measurement fell inside the likely range shown."
+}

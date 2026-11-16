@@ -14,7 +14,8 @@ if not (WEB / "index.html").exists():
     sys.exit("Build the frontend first: run `npm run build` in the frontend folder.")
 
 # Only what the running app reads: not the pipeline's raw downloads in data/cache.
-datas = [(str(DATA / name), "data") for name in ("terrain.npz", "terrain.json", "rover.json", "weather.json", "radiation.json")]
+datas = [(str(DATA / name), "data") for name in ("terrain.npz", "terrain.json", "rover.json", "weather.json", "radiation.json",
+                                                  "forecast_check.json")]
 datas += [(str(DATA / "overlays"), "data/overlays"), (str(DATA / "photos"), "data/photos"), (str(WEB), "web")]
 # The libraries' licence files travel with the app, as their licences ask.
 for package in ("numpy", "scipy", "contourpy", "fastapi", "starlette", "pydantic", "uvicorn", "pywebview"):

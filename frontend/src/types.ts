@@ -114,7 +114,9 @@ export interface Site {
     fetched: string;
     stops: { sol: number; lat: number; lon: number }[];
   };
-  sols: { first: number; latest: number };
+  /** Sols after `latest` are estimates, up to `forecast_until`. `today` is the sol it is now on Mars. */
+  sols: { first: number; latest: number; forecast_until: number; today: number };
+  forecast: { check: ForecastCheck | null };
   storm: StormSummary | null;
   sources: Source[];
   model_notes: string[];
@@ -126,7 +128,30 @@ export interface Radiation {
   dose_ugy_sol: number;
   quality_factor: number;
   extrapolated: boolean;
+  /** True after the last radiation reading: estimated from the solar cycle, with a likely range. */
+  estimated: boolean;
+  range_ugy_h: [number, number] | null;
   last_measured_sol: number;
+}
+
+export type EstimatedValue = "air_min_c" | "air_max_c" | "ground_min_c" | "ground_max_c" | "pressure_pa";
+
+/** How a future day's conditions were estimated (backend/app/forecast.py). */
+export interface Estimate {
+  years_used: number;
+  same_season_sols: number[];
+  /** Likely range of each value: what 8 in 10 of the matching past days fell within. */
+  ranges: Partial<Record<EstimatedValue, [number, number]>>;
+  method: string;
+  warnings: string[];
+}
+
+/** How the estimates did when tried on Curiosity's last measured Mars year (backend/pipeline/check_forecast.py). */
+export interface ForecastCheck {
+  tested_sols: [number, number];
+  typical_error: Partial<Record<"sunrise_min" | "sunset_min" | "air_min_c" | "air_max_c" | "pressure_pa" | "radiation_ugy_h", number>>;
+  share_inside_range: Partial<Record<"air_min_c" | "air_max_c" | "pressure_pa" | "radiation_ugy_h", number>>;
+  note: string;
 }
 
 export interface Conditions {
@@ -148,11 +173,16 @@ export interface Conditions {
   sunset: string;
   daylight_h: number;
   radiation: Radiation | null;
+  /** True for a day after Curiosity's record: every value above is an estimate. */
+  estimated: boolean;
+  estimate: Estimate | null;
 }
 
 export interface History {
   weather: { sol: number[]; date: string[]; air_min_c: (number | null)[]; air_max_c: (number | null)[] };
   radiation: { sol: number[]; date: string[]; dose_ugy_h: number[]; unit: string } | null;
+  /** Estimated dose rate from the last reading to the last sol that can be estimated. */
+  radiation_estimate: { sol: number[]; date: string[]; dose_ugy_h: number[]; low: number[]; high: number[] } | null;
 }
 
 export interface TimeLimit {

@@ -62,7 +62,7 @@ export function loadState(site: Site): PlanState {
     const value = params[name];
     if (isNumber(value)) state.params[name] = clamp(value, site.parameters[name].min, site.parameters[name].max);
   }
-  if (isNumber(saved.sol)) state.sol = Math.round(clamp(saved.sol, site.sols.first, site.sols.latest));
+  if (isNumber(saved.sol)) state.sol = Math.round(clamp(saved.sol, site.sols.first, site.sols.forecast_until));
   return state;
 }
 
@@ -135,7 +135,7 @@ export function parseRouteFile(contents: string, site: Site): PlanState {
     }
     params[name] = value;
   }
-  if (!isNumber(plan.sol) || !Number.isInteger(plan.sol) || plan.sol < site.sols.first || plan.sol > site.sols.latest) {
+  if (!isNumber(plan.sol) || !Number.isInteger(plan.sol) || plan.sol < site.sols.first || plan.sol > site.sols.forecast_until) {
     throw new Error("The route file has an invalid sol.");
   }
 
