@@ -159,12 +159,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: "*-app"
           merge-multiple: true
           path: release
+      # Notes written for the release (docs/releases/<tag>.md) if there are any, otherwise GitHub's list of changes.
+      - name: Find the release notes
+        id: notes
+        run: |
+          if [ -f "docs/releases/${GITHUB_REF_NAME}.md" ]; then echo "path=docs/releases/${GITHUB_REF_NAME}.md" >> "$GITHUB_OUTPUT"; fi
       - uses: softprops/action-gh-release@v2
         with:
+          name: Mars Explorer ${{ github.ref_name }}
           files: release/*
-          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.path }}
+          generate_release_notes: ${{ steps.notes.outputs.path == '' }}

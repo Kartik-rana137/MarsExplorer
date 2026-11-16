@@ -40,7 +40,7 @@ rover = json.loads((DATA_DIR / "rover.json").read_text(encoding="utf-8"))
 photos = PhotoService(DATA_DIR, rover["stops"], cache_dir=Path(CACHE_DIR) / "photos" if CACHE_DIR else None)
 overlays = OverlayStore()
 
-app = FastAPI(title="Mars EVA planner API", version="1.0",
+app = FastAPI(title="Mars EVA planner API", version="1.1",
               description="Route planning and safe-return limits for a crew on foot in the Mount Sharp boxwork region.")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
