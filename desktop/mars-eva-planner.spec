@@ -40,7 +40,7 @@ if sys.platform == "darwin":
         icon=icon,
         bundle_identifier="org.marsexplorer.evaplanner",
         info_plist={
-            "CFBundleShortVersionString": "1.1.0",
+            "CFBundleShortVersionString": "1.1.1",
             "NSHighResolutionCapable": True,
             "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},  # the window talks to http://127.0.0.1
         },
