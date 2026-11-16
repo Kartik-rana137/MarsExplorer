@@ -725,6 +725,107 @@ input[type="checkbox"] {
   color: var(--text-secondary);
 }
 
+/* Typing the day as a number, beside the slider. */
+.sol-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+}
+
+.sol-entry label {
+  color: var(--text-secondary);
+}
+
+.sol-entry input {
+  width: 6.5em;
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--text-primary);
+}
+
+.sol-entry-note {
+  display: block;
+  color: var(--warning);
+  font-size: 12px;
+}
+
+/* ---- estimates for future days ----------------------------------------------------------------------- */
+
+/* Under the day slider: the part Curiosity measured, and the part that is estimated. */
+.sol-scale {
+  display: flex;
+  margin: -2px 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+.sol-scale span {
+  padding: 0 4px;
+  border-top: 3px solid var(--axis);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sol-scale-measured {
+  flex: 0 0 auto;
+}
+
+.sol-scale-estimate {
+  flex: 1 1 auto;
+  text-align: right;
+  color: var(--warning);
+  border-top-style: dashed !important;
+  border-top-color: var(--warning) !important;
+}
+
+.estimate-warning {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--warning);
+  background: var(--warning-wash);
+  color: var(--text-primary);
+}
+
+.estimate-warning[hidden] {
+  display: none;
+}
+
+.estimate-warning strong {
+  display: block;
+  color: var(--warning);
+}
+
+.estimate-warning p,
+.estimate-warning ul {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+}
+
+.estimate-warning ul {
+  padding-left: 18px;
+}
+
+.estimate-badge {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--warning);
+  color: var(--surface-1);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.verdict-body p.verdict-estimate {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
 .slider {
   margin-bottom: 10px;
 }

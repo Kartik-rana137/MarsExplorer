@@ -18,6 +18,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 from app.conditions import CLOCK_STRETCH, Conditions  # noqa: E402
+from app.forecast import MARS_YEAR_SOLS, Forecast, backtest  # noqa: E402
 from app.mission import OverlayStore, PlanError, build_escape, build_plan, time_limit  # noqa: E402
 from app.planner import Planner, relative_speed, simplify, trace  # noqa: E402
 from app.relief import MAX_ZOOM, TILE_PX, ReliefTiles, height_grid  # noqa: E402
@@ -288,6 +289,99 @@ class RealSite(unittest.TestCase):
             self.skipTest("radiation data not built")
         self.assertEqual(self.conditions.storm_dose(0.0, 0.0), 0.0)
         self.assertGreater(self.conditions.storm_dose(0.0, 1.0), self.conditions.storm_dose(0.0, 0.25))
+
+    def test_a_future_day_is_planned_and_marked_as_an_estimate(self):
+        future = self.conditions.latest_sol + 300
+        plan = build_plan(self.planner, self.conditions, OverlayStore(), self.camp, self.stops, params(start_clock_min=600), future)
+        self.assertTrue(plan["conditions"]["estimated"])
+        self.assertEqual(plan["conditions"]["sol"], future)
+        self.assertTrue(any("estimate" in note for note in plan["limit"]["notes"]))
+        self.assertIn(plan["verdict"], ("go", "marginal", "no-go"))
+        measured = build_plan(self.planner, self.conditions, OverlayStore(), self.camp, self.stops, params(start_clock_min=600), None)
+        self.assertFalse(measured["conditions"]["estimated"])
+        self.assertIsNone(measured["conditions"]["estimate"])
+
+    def test_estimates_stop_two_mars_years_ahead(self):
+        self.conditions.for_sol(self.conditions.forecast_until)
+        with self.assertRaises(ValueError):
+            self.conditions.for_sol(self.conditions.forecast_until + 1)
+
+
+def periodic_weather(last_sol: int) -> dict:
+    """A made-up record with seasons that repeat exactly every Mars year."""
+    sols = list(range(1, last_sol + 1))
+    phase = [2 * np.pi * s / MARS_YEAR_SOLS for s in sols]
+    return {
+        "sol": sols,
+        "date": [None] * 10 + [str(np.datetime64("2012-08-06") + np.timedelta64(int(round(s * 1.0275)), "D")) for s in sols[10:]],
+        "ls": [(s * 360.0 / MARS_YEAR_SOLS) % 360 for s in sols],
+        "air_min_c": [-70 + 10 * np.sin(p) for p in phase],
+        "air_max_c": [-10 + 10 * np.sin(p) for p in phase],
+        "ground_min_c": [-80 + 10 * np.sin(p) for p in phase],
+        "ground_max_c": [5 + 10 * np.sin(p) for p in phase],
+        "pressure_pa": [800 + 80 * np.cos(p) for p in phase],
+        "uv": ["Moderate"] * len(sols),
+        "sunrise_min": [int(round(360 + 30 * np.sin(p))) for p in phase],
+        "sunset_min": [int(round(1080 - 30 * np.sin(p))) for p in phase],
+    }
+
+
+class Estimates(unittest.TestCase):
+    def test_repeating_seasons_are_carried_forward(self):
+        forecast = Forecast(periodic_weather(2700), None)
+        for sol in (2750, 3100, 3600, forecast.until_sol):
+            values, estimate = forecast.weather(sol)
+            phase = 2 * np.pi * sol / MARS_YEAR_SOLS
+            self.assertAlmostEqual(values["air_min_c"], -70 + 10 * np.sin(phase), delta=0.6)
+            self.assertAlmostEqual(values["sunrise_min"], 360 + 30 * np.sin(phase), delta=2)
+            self.assertAlmostEqual(values["pressure_pa"], 800 + 80 * np.cos(phase), delta=6)
+            low, high = estimate["ranges"]["air_min_c"]
+            self.assertLessEqual(low, values["air_min_c"])
+            self.assertGreaterEqual(high, values["air_min_c"])
+            self.assertGreaterEqual(estimate["years_used"], 3)
+            self.assertTrue(estimate["warnings"])
+
+    def test_dates_and_sols_convert_both_ways(self):
+        forecast = Forecast(periodic_weather(2700), None)
+        import datetime
+        day = datetime.date.fromisoformat(forecast.date_of(3000))
+        self.assertLessEqual(abs(forecast.sol_on(day) - 3000), 1)
+
+    def test_measured_days_are_not_estimated(self):
+        forecast = Forecast(periodic_weather(2700), None)
+        with self.assertRaises(ValueError):
+            forecast.weather(2700)
+
+    def test_estimates_from_the_real_record_match_what_followed(self):
+        if not (DATA / "weather.json").exists():
+            self.skipTest("weather data not built")
+        import json
+        weather = json.loads((DATA / "weather.json").read_text(encoding="utf-8"))
+        radiation_file = DATA / "radiation.json"
+        radiation = json.loads(radiation_file.read_text(encoding="utf-8")) if radiation_file.exists() else None
+        result = backtest(weather, radiation)
+        error, inside = result["typical_error"], result["share_inside_range"]
+        self.assertLess(error["sunset_min"], 2.0)       # minutes
+        self.assertLess(error["air_min_c"], 4.0)        # degrees
+        self.assertLess(error["air_max_c"], 5.0)
+        self.assertGreater(inside["air_min_c"], 0.75)   # the likely range holds most real days
+        if radiation:
+            self.assertLess(error["radiation_ugy_h"], 1.5)
+            self.assertGreater(inside["radiation_ugy_h"], 0.75)
+
+    def test_radiation_estimate_starts_at_the_last_reading(self):
+        conditions = Conditions(DATA)
+        if not conditions.radiation:
+            self.skipTest("radiation data not built")
+        last = int(conditions.radiation["background"]["sol"][-1])
+        reading = conditions.radiation["background"]["smooth"][-1]
+        dose = conditions.background_dose(last + 2)
+        self.assertTrue(dose["estimated"])
+        self.assertAlmostEqual(dose["dose_ugy_h"], reading, delta=1.0)
+        low, high = dose["range_ugy_h"]
+        self.assertLess(low, dose["dose_ugy_h"])
+        self.assertGreater(high, dose["dose_ugy_h"])
+        self.assertFalse(conditions.background_dose(last - 50)["estimated"])
 
 
 if __name__ == "__main__":

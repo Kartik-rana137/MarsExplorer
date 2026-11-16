@@ -323,7 +323,13 @@ async function start(): Promise<void> {
       return;
     }
     document.body.classList.remove("is-loading");
-    showVerdict(plan.verdict, plan.verdict_text);
+    showVerdict(
+      plan.verdict,
+      plan.verdict_text,
+      plan.conditions.estimated
+        ? `Sol ${plan.conditions.sol} is in the future, so its sunset and weather are predicted from past Mars years, not measured. Check again nearer the day.`
+        : undefined,
+    );
     conditions.update(plan.conditions);
     map.showPlan(plan);
     setStormKey(plan.envelope.storm_line.minutes);

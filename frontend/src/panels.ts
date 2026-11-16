@@ -5,7 +5,7 @@ import { LineChart, type Band, type Tick } from "./charts";
 import { byId, clear, h, icon, type IconName } from "./dom";
 import { clock, clockAfter, CLOCK_STRETCH, distance, duration, fixed, label, temperatureRange } from "./format";
 import { MAP_COLOURS, RELIEF_STRETCH, type LayerName, type MissionMap } from "./map";
-import type { Conditions, Escape, History, ParamName, Params, PhotoResult, Plan, Site, StopInput, Verdict } from "./types";
+import type { Conditions, Escape, EstimatedValue, ForecastCheck, History, ParamName, Params, PhotoResult, Plan, Site, StopInput, Verdict } from "./types";
 
 const VERDICT_LABEL: Record<Verdict, string> = { go: "Safe to go", marginal: "Tight", "no-go": "Not safe", none: "No route yet" };
 const VERDICT_ICON: Record<Verdict, string> = { go: "✓", marginal: "!", "no-go": "✕", none: "–" };
@@ -70,13 +70,20 @@ export function addChip(iconName: IconName, text: string, onClick: () => void): 
 
 // ---- verdict -------------------------------------------------------------------------------------------
 
-export function showVerdict(verdict: Verdict, text: string): void {
+/** `estimateNote` is shown under the verdict when the plan rests on estimated, not measured, conditions. */
+export function showVerdict(verdict: Verdict, text: string, estimateNote?: string): void {
   const box = byId("verdict");
   clear(box);
   box.className = `verdict verdict-${verdict}`;
   box.append(
     h("span", { class: "verdict-icon", "aria-hidden": "true" }, VERDICT_ICON[verdict]),
-    h("div", { class: "verdict-body" }, h("strong", {}, VERDICT_LABEL[verdict]), h("p", {}, text)),
+    h(
+      "div",
+      { class: "verdict-body" },
+      h("strong", {}, VERDICT_LABEL[verdict]),
+      h("p", {}, text),
+      estimateNote ? h("p", { class: "verdict-estimate" }, h("span", { class: "estimate-badge" }, "Estimate"), " ", estimateNote) : null,
+    ),
   );
 }
 
@@ -230,24 +237,81 @@ export class ConditionsPanel {
   private readonly tiles = h("div", { class: "tiles" });
   private readonly extraTiles = h("div", { class: "tiles" });
   private readonly dateLine = h("output", { class: "sol-date" });
+  /** Shown only for a day after Curiosity's record, where every value is an estimate. */
+  private readonly warning = h("div", { class: "estimate-warning", role: "note", hidden: true });
   private readonly solRange: HTMLInputElement;
+  /** The same day as the slider, typed as a number. */
+  private readonly solInput: HTMLInputElement;
+  private readonly entryNote = h("output", { class: "sol-entry-note", for: "sol-input" });
   private readonly details: HTMLDetailsElement;
+  private readonly latest: number;
+  private readonly check: ForecastCheck | null;
   private chart: LineChart | null = null;
-  private history: History | null = null;
+  /** The radiation chart's points: measured, then estimated. */
+  private chartSols: number[] = [];
 
   /** `chip` is the text of the day chip on the map, kept in step with the chosen day. */
   constructor(private readonly section: Section, private readonly chip: HTMLElement, site: Site, sol: number, private readonly onSol: (sol: number) => void) {
-    const { first, latest } = site.sols;
-    this.solRange = h("input", { type: "range", min: first, max: latest, value: sol, "aria-label": "Mars day" });
+    const { first, latest, forecast_until: until, today } = site.sols;
+    this.latest = latest;
+    this.check = site.forecast.check;
+    this.solRange = h("input", { type: "range", min: first, max: until, value: sol, "aria-label": "Mars day" });
     this.solRange.addEventListener("input", () => this.pick(Number(this.solRange.value), false));
     this.solRange.addEventListener("change", () => this.pick(Number(this.solRange.value), true));
+    // Typing a sol: it is used on Enter or on leaving the box; anything out of range is brought into range.
+    this.solInput = h("input", { type: "number", id: "sol-input", min: first, max: until, step: 1, value: sol, inputmode: "numeric" });
+    const enter = () => {
+      const typed = Number(this.solInput.value);
+      if (this.solInput.value.trim() === "" || !Number.isFinite(typed)) {
+        this.solInput.value = this.solRange.value;
+        this.entryNote.textContent = `Type a sol from ${first} to ${until}.`;
+        return;
+      }
+      const chosen = Math.min(until, Math.max(first, Math.round(typed)));
+      if (chosen !== Number(this.solRange.value)) this.pick(chosen, true);
+      this.solInput.value = String(chosen);
+      this.entryNote.textContent =
+        typed < first || typed > until ? `Sols go from ${first} to ${until}: showing sol ${chosen}.`
+        : chosen !== typed ? `A sol is a whole day: showing sol ${chosen}.`
+        : "";
+    };
+    this.solInput.addEventListener("change", enter);
+    this.solInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") enter();
+    });
+    const entry = h(
+      "div",
+      { class: "sol-entry" },
+      h("label", { for: "sol-input" }, "Mars day (sol)"),
+      this.solInput,
+      h("span", { class: "hint" }, `${first} to ${until}`),
+    );
     const preset = (text: string, value: number) => h("button", { type: "button", class: "chip", onclick: () => this.pick(value, true) }, text);
+    const presets = [preset("Latest measured", latest)];
+    if (today > latest && today <= until) presets.push(preset("Today (estimate)", today));
+    presets.push(preset("Quiet Sun, 2020", 2700), preset("Solar storm, May 2024", 4190));
+    // Under the slider: which part of it is measured and which is estimated.
+    const measuredShare = ((latest - first) / Math.max(1, until - first)) * 100;
+    const scale = h(
+      "div",
+      { class: "sol-scale", "aria-hidden": "true" },
+      h("span", { class: "sol-scale-measured", style: `flex-basis:${measuredShare.toFixed(1)}%` }, "measured"),
+      h("span", { class: "sol-scale-estimate" }, "estimate"),
+    );
     this.details = more("More about this day", this.extraTiles);
     section.body.append(
-      h("p", { class: "hint" }, "The planner uses the real weather and radiation NASA's Curiosity rover measured here on that day."),
-      h("div", { class: "chips" }, preset("Latest", latest), preset("Quiet Sun, 2020", 2700), preset("Solar storm, May 2024", 4190)),
+      h(
+        "p",
+        { class: "hint" },
+        `The planner uses the real weather and radiation NASA's Curiosity rover measured here on that day. Curiosity's record runs to sol ${latest}; later days, up to sol ${until}, are estimates.`,
+      ),
+      h("div", { class: "chips" }, ...presets),
+      entry,
+      this.entryNote,
       this.solRange,
+      scale,
       this.dateLine,
+      this.warning,
       this.tiles,
       this.details,
     );
@@ -256,74 +320,131 @@ export class ConditionsPanel {
   private pick(sol: number, commit: boolean): void {
     if (!Number.isFinite(sol)) return;
     this.solRange.value = String(sol);
-    this.dateLine.textContent = `Mars day (sol) ${sol}`;
+    this.solInput.value = String(sol);
+    this.entryNote.textContent = "";
+    this.dateLine.textContent = `Mars day (sol) ${sol}${sol > this.latest ? " · estimate" : ""}`;
     this.pinSol(sol);
     if (commit) this.onSol(sol);
   }
 
   setHistory(history: History): void {
-    this.history = history;
     const series = history.radiation;
     if (!series) return;
+    const ahead = history.radiation_estimate;
+    const lastMeasured = series.sol[series.sol.length - 1];
+    const sols = [...series.sol, ...(ahead?.sol ?? [])];
+    const dates = [...series.date, ...(ahead?.date ?? [])];
+    const dose = [...series.dose_ugy_h, ...(ahead?.dose_ugy_h ?? [])];
+    this.chartSols = sols;
     const yearTicks = (): Tick[] => {
       const ticks: Tick[] = [];
       let lastYear = "";
-      series.date.forEach((date, i) => {
+      dates.forEach((date, i) => {
         const year = date.slice(0, 4);
-        if (year !== lastYear && Number(year) % 3 === 0) ticks.push({ value: series.sol[i], label: year });
+        if (year !== lastYear && Number(year) % 3 === 0) ticks.push({ value: sols[i], label: year });
         lastYear = year;
       });
       return ticks;
     };
-    const dateOf = (sol: number) => series.date[nearestIndex(series.sol, sol)];
+    const dateOf = (sol: number) => dates[nearestIndex(sols, sol)];
     this.chart = new LineChart(this.details, {
       title: "Radiation at the surface over the years, µGy per hour",
       plotHeight: 86,
-      formatX: (sol) => `sol ${Math.round(sol)}, ${prettyDate(dateOf(sol))}`,
+      formatX: (sol) => `sol ${Math.round(sol)}, ${prettyDate(dateOf(sol))}${sol > lastMeasured ? " (estimate)" : ""}`,
       formatY: (value) => value.toFixed(1),
       formatTick: (value) => value.toFixed(0),
       xTicks: yearTicks,
       tableHeaders: ["Sol", "µGy per hour"],
-      onPick: (index) => this.pick(series.sol[index], true),
+      onPick: (index) => this.pick(sols[index], true),
     });
-    this.chart.setData(series.sol, series.dose_ugy_h);
+    const bands = ahead?.sol.length ? [{ from: ahead.sol[0], to: ahead.sol[ahead.sol.length - 1], label: "estimate" }] : [];
+    this.chart.setData(sols, dose, { bands });
     this.pinSol(Number(this.solRange.value));
     this.details.append(
-      h("p", { class: "hint" }, "Radiation from deep space is highest when the Sun is quiet (2020), because the Sun's wind then shields the planets less. Click the chart to pick a day."),
+      h(
+        "p",
+        { class: "hint" },
+        "Radiation from deep space is highest when the Sun is quiet (2020), because the Sun's wind then shields the planets less. The shaded part is an estimate: the Sun's activity cycle carried forward from the measurements. Click the chart to pick a day.",
+      ),
     );
   }
 
   private pinSol(sol: number): void {
-    const series = this.history?.radiation;
-    if (series && this.chart) this.chart.setPinned(nearestIndex(series.sol, sol));
+    if (this.chart && this.chartSols.length) this.chart.setPinned(nearestIndex(this.chartSols, sol));
   }
 
   update(cond: Conditions): void {
     this.solRange.value = String(cond.sol);
+    if (document.activeElement !== this.solInput) this.solInput.value = String(cond.sol); // never overwrite typing in progress
     this.pinSol(cond.sol);
+    const estimate = cond.estimated ? cond.estimate : null;
+    const about = estimate ? "≈ " : "";
     const date = prettyDate(cond.date);
     const season = cond.season ? `, ${cond.season}${cond.dust_season ? " (dusty season)" : ""}` : "";
-    this.dateLine.textContent = `${date} on Earth · Mars day ${cond.sol}${season}`;
-    this.chip.textContent = date;
-    this.section.value.textContent = `${date} · ${temperatureRange(cond.air_min_c, cond.air_max_c)}`;
+    this.dateLine.textContent = estimate
+      ? `Around ${date} on Earth · Mars day ${cond.sol}${season} · estimate`
+      : `${date} on Earth · Mars day ${cond.sol}${season}`;
+    this.chip.textContent = estimate ? `${date} · estimate` : date;
+    this.section.value.textContent = `${date} · ${about}${temperatureRange(cond.air_min_c, cond.air_max_c)}${estimate ? " · estimate" : ""}`;
+    this.showWarning(cond);
+
+    const range = (key: EstimatedValue) => estimate?.ranges[key];
+    const lows = range("air_min_c");
+    const highs = range("air_max_c");
     const rad = cond.radiation;
+    const radRange = rad?.estimated ? rad.range_ugy_h : null;
     clear(this.tiles);
     this.tiles.append(
-      tile("Temperature", temperatureRange(cond.air_min_c, cond.air_max_c), "coldest to warmest"),
-      tile("Daylight", `${cond.sunrise} to ${cond.sunset}`, `${cond.daylight_h.toFixed(1)} hours`),
+      tile(
+        "Temperature",
+        `${about}${temperatureRange(cond.air_min_c, cond.air_max_c)}`,
+        lows && highs ? `likely lows ${Math.round(lows[0])} to ${Math.round(lows[1])}, highs ${Math.round(highs[0])} to ${Math.round(highs[1])} °C` : "coldest to warmest",
+      ),
+      tile("Daylight", `${about}${cond.sunrise} to ${cond.sunset}`, `${cond.daylight_h.toFixed(1)} hours`),
       tile(
         "Radiation",
-        rad ? `${rad.dose_ugy_h.toFixed(1)} µGy/h` : "no data",
-        rad ? `about ${Math.round(rad.dose_usv_h / EARTH_USV_PER_HOUR)}× Earth's natural level` : "",
+        rad ? `${rad.estimated ? "≈ " : ""}${rad.dose_ugy_h.toFixed(1)} µGy/h` : "no data",
+        radRange
+          ? `likely ${radRange[0].toFixed(1)} to ${radRange[1].toFixed(1)} · estimate`
+          : rad ? `about ${Math.round(rad.dose_usv_h / EARTH_USV_PER_HOUR)}× Earth's natural level` : "",
       ),
-      tile("Sunburn risk (UV)", label(cond.uv)),
+      tile("Sunburn risk (UV)", `${about}${label(cond.uv)}`),
     );
+    const pressure = range("pressure_pa");
+    const ground = [range("ground_min_c"), range("ground_max_c")];
     clear(this.extraTiles);
     this.extraTiles.append(
-      tile("Ground temperature", temperatureRange(cond.ground_min_c, cond.ground_max_c)),
-      tile("Air pressure", fixed(cond.pressure_pa, 0, " Pa"), "under 1% of Earth's"),
+      tile(
+        "Ground temperature",
+        `${about}${temperatureRange(cond.ground_min_c, cond.ground_max_c)}`,
+        ground[0] && ground[1] ? `likely lows ${Math.round(ground[0][0])} to ${Math.round(ground[0][1])}, highs ${Math.round(ground[1][0])} to ${Math.round(ground[1][1])} °C` : "",
+      ),
+      tile("Air pressure", `${about}${fixed(cond.pressure_pa, 0, " Pa")}`, pressure ? `likely ${Math.round(pressure[0])} to ${Math.round(pressure[1])} Pa` : "under 1% of Earth's"),
     );
-    if (rad?.extrapolated) this.extraTiles.append(tile("Radiation measured", `sol ${rad.last_measured_sol}`, "latest reading available"));
+    if (rad?.estimated) this.extraTiles.append(tile("Latest radiation reading", `sol ${rad.last_measured_sol}`, "later values are estimates"));
+  }
+
+  /** The warning for a future day: what is estimated, how, how well it did before, and what cannot be predicted. */
+  private showWarning(cond: Conditions): void {
+    clear(this.warning);
+    const estimate = cond.estimated ? cond.estimate : null;
+    this.warning.hidden = !estimate;
+    if (!estimate) return;
+    const check = this.check?.typical_error;
+    const record =
+      check?.sunset_min !== undefined && check.air_min_c !== undefined && check.air_max_c !== undefined
+        ? `Tried on Curiosity's last measured Mars year, this method got sunset right to within ${Math.max(1, Math.round(check.sunset_min))} min and temperatures to within about ${Math.round(check.air_min_c)} to ${Math.round(check.air_max_c)} °C on average.`
+        : null;
+    this.warning.append(
+      h("strong", {}, "Estimate, not a measurement"),
+      h(
+        "p",
+        {},
+        `Sol ${cond.sol} is after Curiosity's latest measurement (sol ${this.latest}). Its weather is predicted from the same time of year in ${estimate.years_used} past Mars years, and its radiation from the Sun's activity cycle. Real conditions can differ.`,
+      ),
+      h("ul", {}, ...estimate.warnings.slice(1).map((text) => h("li", {}, text))),
+    );
+    if (record) this.warning.insertBefore(h("p", {}, record), this.warning.lastChild);
   }
 }
 
@@ -501,7 +622,8 @@ export class RoutePanel {
     this.section.value.textContent = `${t.ascent_m} m uphill · charts along the route`;
     if (t.dose_usv !== null) {
       const days = t.dose_usv / EARTH_USV_PER_DAY;
-      this.doseLine.textContent = `Radiation picked up: about ${t.dose_usv.toFixed(0)} µSv, the same as ${days < 1.5 ? "a day" : `${days.toFixed(0)} days`} of natural radiation on Earth.`;
+      const estimated = plan.conditions.radiation?.estimated ?? false;
+      this.doseLine.textContent = `Radiation picked up: about ${t.dose_usv.toFixed(0)} µSv${estimated ? " (an estimate: no radiation reading for this day yet)" : ""}, the same as ${days < 1.5 ? "a day" : `${days.toFixed(0)} days`} of natural radiation on Earth.`;
     } else {
       this.doseLine.textContent = "";
     }

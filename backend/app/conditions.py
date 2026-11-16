@@ -1,10 +1,16 @@
-"""Measured conditions at Gale Crater for a chosen sol: Curiosity's weather record (REMS) and radiation (RAD)."""
+"""Conditions at Gale Crater for a chosen sol: Curiosity's weather record (REMS) and radiation (RAD).
+
+Sols Curiosity measured are replayed as measured. Later sols, up to two Mars years ahead, are estimated by
+forecast.py and marked `"estimated": true`, with how they were estimated and the likely ranges.
+"""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import numpy as np
+
+from .forecast import Forecast
 
 MARS_SOL_S = 88_775.244
 CLOCK_MIN_S = MARS_SOL_S / 1440   # one minute of the 24-hour Mars clock, in seconds
@@ -33,6 +39,10 @@ class Conditions:
             storm = self.radiation["storm"]
             self._storm_hours = np.asarray(storm["hours"], dtype=float) - storm["onset_hour"]
             self._storm_dose = np.asarray(storm["dose"], dtype=float)
+        self.forecast = Forecast(self.weather, self.radiation)
+        # How well the estimates did when tried on the last measured Mars year (written by pipeline/check_forecast.py).
+        check_file = data_dir / "forecast_check.json"
+        self.forecast_check = json.loads(check_file.read_text(encoding="utf-8")) if check_file.exists() else None
 
     @property
     def first_sol(self) -> int:
@@ -51,47 +61,86 @@ class Conditions:
                 return column[i]
         return None
 
+    @property
+    def forecast_until(self) -> int:
+        """The last sol that can be estimated."""
+        return self.forecast.until_sol
+
     def for_sol(self, sol: int | None = None) -> dict:
+        """Conditions on a sol: measured (the nearest sol Curiosity reported) or, after the record, estimated.
+        Raises ValueError for a sol beyond `forecast_until`."""
         requested = self.latest_sol if sol is None else int(sol)
-        index = int(np.argmin(np.abs(self.sols - requested)))
-        ls = self._value("ls", index)
-        sunrise, sunset = self._value("sunrise_min", index), self._value("sunset_min", index)
-        out = {
-            "sol": int(self.sols[index]),
+        if requested > self.latest_sol:
+            values, estimate = self.forecast.weather(requested)
+            used = requested
+        else:
+            index = int(np.argmin(np.abs(self.sols - requested)))
+            keys = ("ls", "air_min_c", "air_max_c", "ground_min_c", "ground_max_c", "pressure_pa", "uv", "sunrise_min", "sunset_min")
+            values = {key: self._value(key, index) for key in keys}
+            values["date"] = self.weather["date"][index]
+            estimate = None
+            used = int(self.sols[index])
+        ls = values["ls"]
+        sunrise, sunset = values["sunrise_min"], values["sunset_min"]
+        return {
+            "sol": used,
             "requested_sol": requested,
-            "date": self.weather["date"][index],
+            "date": values["date"],
             "ls": ls,
             "season": next(name for limit, name in SEASONS if ls < limit) if ls is not None else None,
             "dust_season": bool(ls is not None and ls >= 180),
-            "air_min_c": self._value("air_min_c", index),
-            "air_max_c": self._value("air_max_c", index),
-            "ground_min_c": self._value("ground_min_c", index),
-            "ground_max_c": self._value("ground_max_c", index),
-            "pressure_pa": self._value("pressure_pa", index),
-            "uv": self._value("uv", index),
+            "air_min_c": values["air_min_c"],
+            "air_max_c": values["air_max_c"],
+            "ground_min_c": values["ground_min_c"],
+            "ground_max_c": values["ground_max_c"],
+            "pressure_pa": values["pressure_pa"],
+            "uv": values["uv"],
             "sunrise_min": sunrise,
             "sunset_min": sunset,
             "sunrise": clock(sunrise),
             "sunset": clock(sunset),
             "daylight_h": round((sunset - sunrise) * CLOCK_MIN_S / 3600, 2),
-            "radiation": self.background_dose(int(self.sols[index])),
+            "radiation": self.background_dose(used),
+            "estimated": estimate is not None,
+            "estimate": estimate,
         }
-        return out
 
     def background_dose(self, sol: int) -> dict | None:
-        """Everyday (galactic cosmic ray) dose rate around a sol, from RAD's long-term record."""
+        """Everyday (galactic cosmic ray) dose rate around a sol: RAD's long-term record, or after its last reading,
+        an estimate from the solar cycle (marked `estimated`, with a likely range)."""
         if not self.radiation:
             return None
-        rate = float(np.interp(sol, self._rad_sols, self._rad_smooth))
-        q = self.radiation["quality_factor"]
         last = int(self._rad_sols[-1])
+        low_high = None
+        if sol > last and self.forecast.radiation:
+            rate, low, high = self.forecast.radiation.rate(sol)
+            low_high = [round(low, 1), round(high, 1)]
+        else:
+            rate = float(np.interp(sol, self._rad_sols, self._rad_smooth))
+        q = self.radiation["quality_factor"]
         return {
             "dose_ugy_h": round(rate, 2),
             "dose_usv_h": round(rate * q, 1),
             "dose_ugy_sol": round(rate * MARS_SOL_S / 3600, 0),
             "quality_factor": q,
             "extrapolated": sol > last,
+            "estimated": low_high is not None,
+            "range_ugy_h": low_high,
             "last_measured_sol": last,
+        }
+
+    def radiation_outlook(self, step: int = 10) -> dict | None:
+        """The estimated dose rate from the last reading to the last sol that can be estimated, for the chart."""
+        if not self.radiation or not self.forecast.radiation:
+            return None
+        sols = list(range(int(self._rad_sols[-1]) + step, self.forecast_until + 1, step))
+        rates = [self.forecast.radiation.rate(s) for s in sols]
+        return {
+            "sol": sols,
+            "date": [self.forecast.date_of(s) for s in sols],
+            "dose_ugy_h": [round(r[0], 2) for r in rates],
+            "low": [round(r[1], 2) for r in rates],
+            "high": [round(r[2], 2) for r in rates],
         }
 
     def storm_dose(self, start_h: float, hours: float) -> float:
@@ -124,7 +173,7 @@ class Conditions:
         """Thinned long-term series for charts."""
         step = 4
         weather = {key: self.weather[key][::step] for key in ("sol", "date", "air_min_c", "air_max_c")}
-        out = {"weather": weather, "radiation": None}
+        out = {"weather": weather, "radiation": None, "radiation_estimate": self.radiation_outlook()}
         if self.radiation:
             background = self.radiation["background"]
             out["radiation"] = {"sol": background["sol"][::3], "date": background["date"][::3],

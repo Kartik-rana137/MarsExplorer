@@ -115,4 +115,7 @@ MODEL_NOTES = [
     "Ground steeper than the slope limit is treated as no-go. Slopes come from 1 m elevation data and cannot show rocks smaller than a few metres.",
     "The time limit is the tighter of usable life support (capacity minus reserve) and daylight (back before sunset minus the buffer).",
     "Radiation figures use the dose rate Curiosity measured around the chosen sol; sieverts are estimated with a mean quality factor of 3.05.",
+    ("Days after Curiosity's latest measurement are estimates, up to two Mars years ahead. Weather comes from the same time of "
+     "year in every past Mars year Curiosity measured (Mars repeats its seasons every 668.6 sols). Radiation follows a fit of the "
+     "Sun's 11-year activity cycle, joined to the latest reading. Dust storms and solar storms cannot be predicted."),
 ]

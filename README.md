@@ -17,7 +17,8 @@ The map is 3D, in the manner of a globe viewer: NASA's imagery is draped over th
 - **Get a clear verdict.** "Safe to go", "Tight" or "Not safe", with the reason in one sentence. If the plan runs too long, the map marks where and when to turn back.
 - **Choose a display theme.** Switch between light and dark mode from the panel header; the choice is remembered on this device.
 - **Run a solar storm drill.** Choose where the crew is when an alert arrives. The planner shows the fastest way back and whether they reach shelter within the warning time. The storm itself is the real one Curiosity recorded on 20 May 2024.
-- **Plan against real conditions.** Pick any Martian day (sol) since 2012 and the planner uses the temperature, daylight and radiation Curiosity measured then.
+- **Plan against real conditions.** Pick any Martian day (sol) since 2012, with the slider or by typing its number, and the planner uses the temperature, daylight and radiation Curiosity measured then.
+- **Plan ahead.** Pick a day up to two Mars years after Curiosity's latest measurement, including today, and the planner estimates its conditions from past Mars years. Every estimate is marked as one, with a likely range. See [Estimating future days](#estimating-future-days).
 - **Look before you go.** For any point, see the photos Curiosity took from the nearest place it stood, labelled by compass direction.
 - **Share a plan.** Copy a link or save a JSON route file. Load a route file to restore its camp, stops, walk settings and sol.
 - **Drive the base rover.** Take the crew's pressurised rover for a drive in 3D with W, A, S and D, racing-game style, and park it where base camp should be. The planner then replans from the new spot. See [Driving the base rover](#driving-the-base-rover).
@@ -91,7 +92,7 @@ frontend/  TypeScript. Draws the map, panels and charts and sends the plan to th
 | Endpoint | What it returns |
 |---|---|
 | `GET /api/site` | Study area, map layers, rover path and sites, default plan, setting ranges, data sources |
-| `GET /api/conditions?sol=` | Weather and background radiation measured on a sol |
+| `GET /api/conditions?sol=` | Weather and background radiation measured on a sol, or estimated for a later sol (`"estimated": true`, with likely ranges) |
 | `GET /api/conditions/history` | Long-term temperature and radiation series |
 | `POST /api/plan` | Route, timings, verdict, turn-back point, storm exposure, safe-return area |
 | `POST /api/escape` | Fastest way back to base camp from a position, judged against the storm warning |
@@ -120,7 +121,7 @@ Site names and descriptions come from NASA's Curiosity mission blog (links are i
 - **No-go ground.** Cells steeper than the crew's slope limit (default 20°) cannot be entered.
 - **Walking speed.** Speed on level ground is a setting (default 0.8 m/s). Slopes change it by Tobler's hiking function, so uphill and downhill differ and the way out and the way back are searched separately.
 - **Route.** Dijkstra's shortest-path search over the grid, minimising walking time. A search of the whole area takes about 0.15 seconds.
-- **Time limit.** The tighter of usable life support (capacity minus reserve) and daylight (back before sunset minus a buffer). Sunrise and sunset are the measured values for the chosen sol.
+- **Time limit.** The tighter of usable life support (capacity minus reserve) and daylight (back before sunset minus a buffer). Sunrise and sunset are the measured values for the chosen sol, or estimates for a future sol.
 - **Turn-back line.** The edge of the area where walking there, doing the planned work and walking back fits inside the time limit.
 - **Storm line.** The edge of the area from which base camp can be reached within the storm warning time.
 - **Radiation.** The dose for an EVA is the background dose rate Curiosity measured around that sol times the hours outside. Sieverts are estimated with a mean quality factor of 3.05 (Hassler et al. 2014).
@@ -133,6 +134,24 @@ At Curiosity's 263 stops inside the study area, the terrain grid differs from th
 
 - Background dose rate at the surface follows the solar cycle: about 8.5 µGy/h in 2012, 13 µGy/h at solar minimum in 2020, and about 6 µGy/h in 2024 to 2026.
 - In the 20 May 2024 storm the dose rate rose from 5.5 to 351 µGy/h (64 times) within 54 minutes. Over 44 hours the event added about 1.7 mGy, as much as 13 sols of normal background.
+
+### Estimating future days
+
+Curiosity's weather record ends at sol 4995 (25 August 2026), and its radiation record at sol 4842 (March 2026). For a later day, up to two Mars years ahead (sol 6332, May 2030), the planner **estimates** the conditions instead of replaying them (`backend/app/forecast.py`). Wherever an estimate is used, the app says so: the day chip and the Day on Mars section read "estimate", the verdict carries an *Estimate* note, values are shown as "≈" with a likely range, and a warning explains how they were estimated and what cannot be predicted.
+
+- **Weather.** Mars repeats its seasons every Mars year (668.6 sols), and Curiosity has measured more than seven. A future day's temperatures, sunrise, sunset and UV come from the same time of year (the matching sol, plus or minus a week) in every past year: the middle value is the estimate, and the 10th to 90th percentile the likely range. Air pressure uses only the most recent year, because Curiosity has been climbing Mount Sharp, where the air is thinner.
+- **Radiation.** The background dose rate follows the Sun's activity cycle. A cycle (best fit: 11.8 years) is fitted to the radiation record and joined to the latest reading. The likely range is how far the same method was off when tried from earlier points in the record, for the same distance ahead. It predicts the dose rate rising from about 7 µGy/h now towards 13 µGy/h by 2030, as the Sun heads for its next quiet phase.
+- **Not predictable:** dust storms and solar storms. The warning says so, and the solar storm test still applies.
+
+**How good are the estimates?** `backend/pipeline/check_forecast.py` runs the method as if the record had ended one Mars year earlier and compares its estimates for that last year (sols 4327 to 4995) with what Curiosity measured:
+
+| Estimate | Typical error | Measured value inside the likely range |
+|---|---|---|
+| Sunrise and sunset | 0.1 min | — |
+| Coldest air temperature | 2.3 °C | 87 % of days |
+| Warmest air temperature | 3.0 °C | 87 % of days |
+| Air pressure | 8.1 Pa (about 1 %) | 98 % of days |
+| Background radiation | 0.6 µGy/h | all days |
 
 ## Driving the base rover
 
@@ -179,7 +198,7 @@ On Mars it weighs what 2,249 kg would on Earth. The mass matters most at speed, 
 - Slopes come from 1 m elevation data. Rocks and ledges smaller than a few metres, and soft sand, are not seen.
 - The 3D view draws heights 1.5 times taller than life so low ridges are easy to see. Outside the framed study area there is no elevation data, so the ground there simply continues the area's overall tilt. The 3D map needs a browser with WebGL.
 - The walking model was derived for hikers on Earth. Suited walking on Mars is uncertain, which is why speed and slope limit are settings.
-- Conditions are a replay of measured sols, not a forecast. Weather is daily minimum and maximum only.
+- Conditions are a replay of measured sols. Days after Curiosity's record are estimates from past Mars years, not forecasts of the actual weather: they cannot foresee dust storms or solar storms. Weather is daily minimum and maximum only.
 - Background radiation is one reading every second sol, smoothed over 40 sols. The storm drill uses one recorded event and counts dose outdoors only; shielding inside the shelter is not modelled.
 - The storm warning time is an assumption the crew sets.
 - In the drive mode, the rover's mass, power and grip are estimates, and the ground is treated as firm everywhere (no soft sand, no rocks smaller than the 4 m grid). Driving needs a keyboard (or the on-screen pads on a touch screen) and a graphics card that handles WebGL.
@@ -195,6 +214,7 @@ backend\.venv\Scripts\python backend\pipeline\build_weather.py    # daily weathe
 backend\.venv\Scripts\python backend\pipeline\build_terrain.py    # elevation and slope; downloads about 330 MB
 backend\.venv\Scripts\python backend\pipeline\build_radiation.py  # radiation; downloads about 520 MB
 backend\.venv\Scripts\python backend\pipeline\build_photos.py     # photos for the named sites
+backend\.venv\Scripts\python backend\pipeline\check_forecast.py   # how well estimates for future days did; after weather or radiation
 ```
 
 The elevation file is 3.9 GB, so `build_terrain.py` downloads only the rows that cover the study area.
@@ -204,7 +224,7 @@ The elevation file is 3.9 GB, so `build_terrain.py` downloads only the rows that
 The drive-mode physics tests run each case twice, on Mars and with Earth gravity, so the effect of gravity is checked rather than assumed. `npm test` needs Node.js 23.6 or newer, which runs TypeScript directly.
 
 ```powershell
-backend\.venv\Scripts\python -m unittest discover -s backend/tests -v   # planner, mission logic, terrain, rover, 27 tests
+backend\.venv\Scripts\python -m unittest discover -s backend/tests -v   # planner, mission logic, terrain, rover, estimates, 34 tests
 cd frontend; npm run typecheck                                          # TypeScript
 cd frontend; npm test                                                   # drive-mode physics, Mars against Earth, 7 tests
 ```
@@ -214,7 +234,8 @@ cd frontend; npm test                                                   # drive-
 ```
 backend/
   app/         API (main.py), route search (planner.py), mission logic (mission.py),
-               conditions, photos, terrain, elevation for the 3D map and the drive mode (relief.py),
+               conditions, estimates for future days (forecast.py), photos, terrain,
+               elevation for the 3D map and the drive mode (relief.py),
                site description and the base rover (site.py)
   pipeline/    scripts that build backend/data from NASA sources
   data/        prepared data: terrain grid, weather, radiation, rover stops, photo lists
