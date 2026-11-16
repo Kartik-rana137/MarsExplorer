@@ -1,12 +1,11 @@
 # Builds the planner as apps for Windows, macOS and Android, and checks each one starts and plans a walk.
-# Runs on pushes to the app-builds branch, on version tags (v1.0.0 ...), and from the Actions tab ("Run workflow").
+# Runs on version tags (v1.0.0 ...) and from the Actions tab ("Run workflow").
 # The apps are attached to each run under "Artifacts"; for a version tag they are also published as a release.
 name: Build apps
 
 on:
   workflow_dispatch:
   push:
-    branches: [app-builds]
     tags: ["v*"]
 
 jobs:
